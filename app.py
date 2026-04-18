@@ -739,62 +739,29 @@ with st.sidebar:
 
     # Kur paneli
     st.markdown("**💱 USD/TL Kur**")
-    
+
     if "kur" not in st.session_state:
         st.session_state.kur = 38.50
 
-    # JavaScript ile tarayıcıdan kur çek
-    kur_js = st.components.v1.html("""
-        <script>
-        async function kurCek() {
-            const apis = [
-                'https://open.er-api.com/v6/latest/USD',
-                'https://api.exchangerate-api.com/v4/latest/USD',
-            ];
-            for (const url of apis) {
-                try {
-                    const r = await fetch(url);
-                    const d = await r.json();
-                    const kur = d.rates?.TRY;
-                    if (kur) {
-                        document.getElementById('kur-sonuc').innerText = kur.toFixed(2);
-                        document.getElementById('kur-btn').innerText = '✅ ' + kur.toFixed(2) + ' ₺ — Yukarıya girin';
-                        document.getElementById('kur-btn').style.background = '#059669';
-                        return;
-                    }
-                } catch(e) {}
-            }
-            document.getElementById('kur-btn').innerText = '❌ Alınamadı';
-        }
-        </script>
-        <div style="font-family:sans-serif">
-            <button id="kur-btn" onclick="kurCek()" style="
-                background:#2D6BE4;color:white;border:none;
-                padding:8px 16px;border-radius:6px;cursor:pointer;
-                width:100%;font-size:13px;font-weight:600;">
-                🌐 Anlık Kuru Getir
-            </button>
-            <div id="kur-sonuc" style="
-                margin-top:6px;font-size:18px;font-weight:700;
-                color:#059669;text-align:center;letter-spacing:1px;">
-            </div>
-        </div>
-    """, height=80)
-
     yeni_kur = st.number_input(
-        "Kur değerini girin (₺)", 
-        value=float(st.session_state.kur), 
-        step=0.01, 
+        "",
+        value=float(st.session_state.kur),
+        step=0.01,
         min_value=1.0,
         format="%.2f",
+        label_visibility="collapsed",
     )
-    if yeni_kur != st.session_state.kur:
-        st.session_state.kur = yeni_kur
-    
-    st.markdown(
-        '<a href="https://kur.doviz.com" target="_blank" style="color:#90CAF9;font-size:11px;">📊 kur.doviz.com →</a>',
-        unsafe_allow_html=True
-    )
+    st.session_state.kur = yeni_kur
+
+    if st.button("🔄 Güncel Kur", use_container_width=True):
+        with st.spinner("Alınıyor..."):
+            kur_cekilen, basarili = fetch_kur_live()
+        if basarili:
+            st.session_state.kur = kur_cekilen
+            st.success(f"✅ {kur_cekilen} ₺")
+            st.rerun()
+        else:
+            st.error("❌ Bağlanamadı, manuel girin.")
 
     st.markdown(f"<small>🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}</small>", unsafe_allow_html=True)
 
