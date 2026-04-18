@@ -170,16 +170,22 @@ def get_kur():
 
 
 def fetch_kur_live():
-    try:
-        r = requests.get("https://open.er-api.com/v6/latest/USD", timeout=5)
-        d = r.json()
-        if d.get("rates") and d["rates"].get("TRY"):
-            kur = round(d["rates"]["TRY"], 2)
-            st.session_state.kur = kur
-            st.session_state.kur_kaynak = "Otomatik"
-            return kur, True
-    except Exception:
-        pass
+    """Birden fazla API kaynağından USD/TL kurunu çeker."""
+    apis = [
+        ("https://open.er-api.com/v6/latest/USD", lambda d: round(d["rates"]["TRY"], 2)),
+        ("https://api.exchangerate-api.com/v4/latest/USD", lambda d: round(d["rates"]["TRY"], 2)),
+        ("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json", lambda d: round(d["usd"]["try"], 2)),
+    ]
+    for url, parser in apis:
+        try:
+            r = requests.get(url, timeout=6)
+            d = r.json()
+            kur = parser(d)
+            if kur and kur > 1:
+                st.session_state.kur = kur
+                return kur, True
+        except Exception:
+            continue
     return get_kur(), False
 
 
@@ -257,26 +263,14 @@ with st.sidebar:
                               label_visibility="collapsed", key="kur_input")
     st.session_state.kur = kur_val
 
-    col_kur1, col_kur2 = st.columns(2)
-    with col_kur1:
-        if st.button("💾 Kaydet", use_container_width=True):
-            st.session_state.kur = kur_val
-            st.success(f"✅ {kur_val} ₺")
-    with col_kur2:
-        if st.button("🔄 Güncel", use_container_width=True):
-            try:
-                r = requests.get("https://open.er-api.com/v6/latest/USD", timeout=5)
-                d = r.json()
-                if d.get("rates") and d["rates"].get("TRY"):
-                    yeni_kur = round(d["rates"]["TRY"], 2)
-                    st.session_state.kur = yeni_kur
-                    st.session_state.kur_input = yeni_kur
-                    st.success(f"✅ {yeni_kur} ₺")
-                    st.rerun()
-                else:
-                    st.error("API hatası")
-            except Exception:
-                st.error("Bağlantı hatası")
+    if st.button("🔄 Güncel Kur Al", use_container_width=True):
+        with st.spinner("Kur alınıyor..."):
+            yeni_kur, basarili = fetch_kur_live()
+        if basarili:
+            st.success(f"✅ {yeni_kur} ₺")
+            st.rerun()
+        else:
+            st.error("❌ Bağlantı hatası. Manuel girin.")
 
     st.markdown(f"<small>🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}</small>", unsafe_allow_html=True)
 
