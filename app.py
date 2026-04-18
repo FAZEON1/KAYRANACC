@@ -401,10 +401,46 @@ header[data-testid="stHeader"] {
     border-bottom: 1px solid #E2E8F0 !important;
 }
 
-/* ── TOOLTIP ── */
-.tooltip {
-    position: relative;
-    display: inline-block;
+/* ── DARK MODE OVERRIDE — TÜM YAZILARI ZORLA DÜZELT ── */
+.stApp, .stApp * {
+    color-scheme: light !important;
+}
+.stApp {
+    background: linear-gradient(135deg, #F0F4FF 0%, #F8FAFF 50%, #EFF6FF 100%) !important;
+}
+/* Ana içerik yazıları */
+.stMarkdown, .stMarkdown p, .stMarkdown span, .stMarkdown div,
+.stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
+p, span, div, label, h1, h2, h3, h4 {
+    color: #0F172A !important;
+}
+/* Tab yazıları */
+.stTabs [data-baseweb="tab"] span {
+    color: #64748B !important;
+}
+.stTabs [aria-selected="true"] span {
+    color: #1E40AF !important;
+}
+/* Info / success / warning / error kutuları */
+div[data-testid="stAlert"] p {
+    color: inherit !important;
+}
+/* DataFrame içi */
+.stDataFrame * { color: #0F172A !important; }
+/* Expander */
+.streamlit-expanderHeader p, .streamlit-expanderHeader span {
+    color: #334155 !important;
+}
+/* Selectbox, input */
+.stSelectbox div, .stTextInput div, .stNumberInput div {
+    color: #0F172A !important;
+}
+/* Sidebar hariç tut */
+section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] span,
+section[data-testid="stSidebar"] div,
+section[data-testid="stSidebar"] label {
+    color: #E2E8F0 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1203,6 +1239,7 @@ elif sayfa == "💸 Nakit Akış":
 # ════════════════════════════════════════════════════════════════════
 elif sayfa == "📋 Firma Çekleri":
     st.markdown('<div class="baslik">📋 Firma Çekleri</div>', unsafe_allow_html=True)
+    st.markdown('<div class="alt-baslik">TL ve USD bazında çek takibi</div>', unsafe_allow_html=True)
 
     def cek_tablo(cekler, cur):
         if not cekler:
