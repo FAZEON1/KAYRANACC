@@ -175,10 +175,15 @@ def fetch_kur_live():
         ("https://open.er-api.com/v6/latest/USD", lambda d: round(d["rates"]["TRY"], 2)),
         ("https://api.exchangerate-api.com/v4/latest/USD", lambda d: round(d["rates"]["TRY"], 2)),
         ("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json", lambda d: round(d["usd"]["try"], 2)),
+        ("https://api.frankfurter.app/latest?from=USD&to=TRY", lambda d: round(d["rates"]["TRY"], 2)),
     ]
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json",
+    }
     for url, parser in apis:
         try:
-            r = requests.get(url, timeout=6)
+            r = requests.get(url, timeout=8, headers=headers)
             d = r.json()
             kur = parser(d)
             if kur and kur > 1:
@@ -259,18 +264,35 @@ with st.sidebar:
 
     # Kur paneli
     st.markdown("**💱 USD/TL Kur**")
-    kur_val = st.number_input("", value=st.session_state.get("kur", 38.50), step=0.01, min_value=1.0,
-                              label_visibility="collapsed", key="kur_input")
-    st.session_state.kur = kur_val
+    
+    if "kur" not in st.session_state:
+        st.session_state.kur = 38.50
+
+    yeni_kur = st.number_input(
+        "", 
+        value=float(st.session_state.kur), 
+        step=0.01, 
+        min_value=1.0,
+        format="%.2f",
+        label_visibility="collapsed"
+    )
+    if yeni_kur != st.session_state.kur:
+        st.session_state.kur = yeni_kur
 
     if st.button("🔄 Güncel Kur Al", use_container_width=True):
         with st.spinner("Kur alınıyor..."):
-            yeni_kur, basarili = fetch_kur_live()
+            yeni_kur_api, basarili = fetch_kur_live()
         if basarili:
-            st.success(f"✅ {yeni_kur} ₺")
+            st.session_state.kur = yeni_kur_api
+            st.success(f"✅ {yeni_kur_api} ₺")
             st.rerun()
         else:
-            st.error("❌ Bağlantı hatası. Manuel girin.")
+            st.warning("⚠️ Otomatik kur alınamadı.")
+    
+    st.markdown(
+        '<a href="https://kur.doviz.com" target="_blank" style="color:#90CAF9;font-size:11px;">📊 Güncel kura bak →</a>',
+        unsafe_allow_html=True
+    )
 
     st.markdown(f"<small>🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}</small>", unsafe_allow_html=True)
 
