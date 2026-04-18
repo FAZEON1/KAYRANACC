@@ -415,32 +415,95 @@ p, span, div, label, h1, h2, h3, h4 {
     color: #0F172A !important;
 }
 /* Tab yazıları */
-.stTabs [data-baseweb="tab"] span {
-    color: #64748B !important;
-}
-.stTabs [aria-selected="true"] span {
-    color: #1E40AF !important;
-}
+.stTabs [data-baseweb="tab"] span { color: #64748B !important; }
+.stTabs [aria-selected="true"] span { color: #1E40AF !important; }
 /* Info / success / warning / error kutuları */
-div[data-testid="stAlert"] p {
-    color: inherit !important;
-}
+div[data-testid="stAlert"] p { color: inherit !important; }
 /* DataFrame içi */
 .stDataFrame * { color: #0F172A !important; }
 /* Expander */
-.streamlit-expanderHeader p, .streamlit-expanderHeader span {
-    color: #334155 !important;
-}
+.streamlit-expanderHeader p, .streamlit-expanderHeader span { color: #334155 !important; }
 /* Selectbox, input */
-.stSelectbox div, .stTextInput div, .stNumberInput div {
+.stSelectbox div, .stTextInput div, .stNumberInput div { color: #0F172A !important; }
+
+/* ── FILE UPLOADER — KARANLIK ALAN DÜZELTMESİ ── */
+[data-testid="stFileUploader"] {
+    background: white !important;
+    border-radius: 14px !important;
+}
+[data-testid="stFileUploader"] > div,
+[data-testid="stFileUploader"] section,
+[data-testid="stFileUploader"] section > div {
+    background: white !important;
+    border-radius: 12px !important;
+}
+[data-testid="stFileUploader"] section {
+    border: 2px dashed #CBD5E1 !important;
+    padding: 16px !important;
+}
+[data-testid="stFileUploader"] button {
+    background: #EFF6FF !important;
+    color: #1E40AF !important;
+    border: 1.5px solid #BFDBFE !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    font-size: 13px !important;
+}
+[data-testid="stFileUploader"] span,
+[data-testid="stFileUploader"] p,
+[data-testid="stFileUploader"] small,
+[data-testid="stFileUploaderDropzone"] span,
+[data-testid="stFileUploaderDropzone"] p {
+    color: #64748B !important;
+}
+[data-testid="stFileUploaderDropzone"] {
+    background: white !important;
+    border: 2px dashed #CBD5E1 !important;
+    border-radius: 12px !important;
+}
+
+/* ── DOWNLOAD BUTONU ── */
+[data-testid="stDownloadButton"] button {
+    background: white !important;
+    border: 1.5px solid #E2E8F0 !important;
+    color: #334155 !important;
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+}
+[data-testid="stDownloadButton"] button:hover {
+    background: #F8FAFC !important;
+    border-color: #CBD5E1 !important;
+}
+
+/* ── SELECTBOX DROPDOWN ── */
+[data-baseweb="select"] > div { background: white !important; color: #0F172A !important; }
+[data-baseweb="popover"], [data-baseweb="menu"] { background: white !important; }
+[data-baseweb="option"] { background: white !important; color: #0F172A !important; }
+[data-baseweb="option"]:hover { background: #EFF6FF !important; }
+[data-baseweb="select"] span { color: #0F172A !important; }
+
+/* ── NUMBER / TEXT / DATE INPUT ── */
+[data-testid="stNumberInput"] input,
+[data-testid="stTextInput"] input,
+[data-testid="stDateInput"] input,
+textarea {
+    background: white !important;
     color: #0F172A !important;
 }
-/* Sidebar hariç tut */
+
+/* ── CHECKBOX ── */
+[data-testid="stCheckbox"] span { color: #0F172A !important; }
+
+/* ── SIDEBAR HARİÇ TUT ── */
 section[data-testid="stSidebar"] p,
 section[data-testid="stSidebar"] span,
 section[data-testid="stSidebar"] div,
 section[data-testid="stSidebar"] label {
     color: #E2E8F0 !important;
+}
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] * {
+    color: #E2E8F0 !important;
+    background: rgba(255,255,255,0.08) !important;
 }
 </style>
 """, unsafe_allow_html=True)
