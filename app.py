@@ -253,17 +253,30 @@ with st.sidebar:
 
     # Kur paneli
     st.markdown("**💱 USD/TL Kur**")
-    kur_val = st.number_input("", value=get_kur(), step=0.01, min_value=1.0,
+    kur_val = st.number_input("", value=st.session_state.get("kur", 38.50), step=0.01, min_value=1.0,
                               label_visibility="collapsed", key="kur_input")
     st.session_state.kur = kur_val
 
-    if st.button("🔄 Güncel Kur", use_container_width=True):
-        kur, basarili = fetch_kur_live()
-        if basarili:
-            st.success(f"✅ Kur: {kur} ₺")
-        else:
-            st.error("Bağlantı hatası")
-        st.rerun()
+    col_kur1, col_kur2 = st.columns(2)
+    with col_kur1:
+        if st.button("💾 Kaydet", use_container_width=True):
+            st.session_state.kur = kur_val
+            st.success(f"✅ {kur_val} ₺")
+    with col_kur2:
+        if st.button("🔄 Güncel", use_container_width=True):
+            try:
+                r = requests.get("https://open.er-api.com/v6/latest/USD", timeout=5)
+                d = r.json()
+                if d.get("rates") and d["rates"].get("TRY"):
+                    yeni_kur = round(d["rates"]["TRY"], 2)
+                    st.session_state.kur = yeni_kur
+                    st.session_state.kur_input = yeni_kur
+                    st.success(f"✅ {yeni_kur} ₺")
+                    st.rerun()
+                else:
+                    st.error("API hatası")
+            except Exception:
+                st.error("Bağlantı hatası")
 
     st.markdown(f"<small>🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}</small>", unsafe_allow_html=True)
 
