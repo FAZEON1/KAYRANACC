@@ -31,13 +31,21 @@ def parse_date(v):
 
 
 def parse_num(v):
+    import math
     if v is None or v == "":
+        return None
+    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
         return None
     if isinstance(v, (int, float)):
         return float(v)
     try:
-        s = str(v).replace(" ", "").replace(".", "").replace(",", ".")
-        return float(s)
+        s = str(v).strip().replace(" ", "").replace(".", "").replace(",", ".")
+        if s in ("", "nan", "none", "-"):
+            return None
+        result = float(s)
+        if math.isnan(result) or math.isinf(result):
+            return None
+        return result
     except Exception:
         return None
 

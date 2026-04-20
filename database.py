@@ -81,24 +81,44 @@ def get_hafta_ozet(hafta_id):
     }
 
 
+def _temizle(v):
+    """None, NaN ve inf değerleri temizler."""
+    if v is None:
+        return None
+    try:
+        import math
+        f = float(v)
+        if math.isnan(f) or math.isinf(f):
+            return None
+        return f
+    except (TypeError, ValueError):
+        return None
+
+
 def odeme_ekle_bulk(hafta_id, odemeler):
     sb = get_client()
     rows = []
     for o in odemeler:
+        tl  = _temizle(o.get("tl"))
+        usd = _temizle(o.get("usd"))
+        if tl is None and usd is None:
+            continue  # tutarsız satırı atla
         rows.append({
-            "hafta_id": hafta_id,
-            "firma": o.get("firma", ""),
-            "aciklama": o.get("aciklama", ""),
-            "cari_banka": o.get("cari_banka", ""),
-            "vade": o.get("vade", ""),
-            "tutar_tl": o.get("tl"),
-            "tutar_usd": o.get("usd"),
-            "kategori": o.get("kategori", "diger"),
-            "manuel": o.get("manuel", 0),
-            "durum": "bekliyor",
+            "hafta_id":   int(hafta_id),
+            "firma":      str(o.get("firma") or "")[:500],
+            "aciklama":   str(o.get("aciklama") or "")[:500],
+            "cari_banka": str(o.get("cari_banka") or "")[:500],
+            "vade":       str(o.get("vade") or ""),
+            "tutar_tl":   tl,
+            "tutar_usd":  usd,
+            "kategori":   str(o.get("kategori") or "diger"),
+            "manuel":     int(o.get("manuel") or 0),
+            "durum":      "bekliyor",
         })
-    if rows:
-        sb.table("odemeler").insert(rows).execute()
+    # Supabase free tier için 100'er satır halinde gönder
+    BATCH = 100
+    for i in range(0, len(rows), BATCH):
+        sb.table("odemeler").insert(rows[i:i+BATCH]).execute()
 
 
 def odeme_ekle_manuel(hafta_id, firma, aciklama, cari_banka, vade, tutar_tl, tutar_usd, kategori):
@@ -175,20 +195,21 @@ def cek_ekle_bulk(cekler, para_birimi="TL"):
     rows = []
     for c in cekler:
         rows.append({
-            "ref_no":    c.get("ref_no", ""),
-            "cek_no":    c.get("cek_no", ""),
-            "tarih":     c.get("tarih", ""),
-            "vade":      c.get("vade", ""),
-            "meblagh":   c.get("meblagh", 0),
-            "odenen":    c.get("odenen", 0),
-            "kalan":     c.get("kalan", 0),
-            "durum":     c.get("durum", "Bekliyor"),
-            "ch_kodu":   c.get("ch_kodu", ""),
-            "ch_ismi":   c.get("ch_ismi", ""),
-            "banka":     c.get("banka", ""),
-            "sube":      c.get("sube", ""),
-            "hesap_no":  c.get("hesap_no", ""),
-            "para_birimi": para_birimi,
+            "ref_no":      str(c.get("ref_no") or ""),
+            "cek_no":      str(c.get("cek_no") or ""),
+            "tarih":       str(c.get("tarih") or ""),
+            "vade":        str(c.get("vade") or ""),
+            "meblagh":     _temizle(c.get("meblagh")) or 0,
+            "odenen":      _temizle(c.get("odenen")) or 0,
+            "kalan":       _temizle(c.get("kalan")) or 0,
+            "durum":       str(c.get("durum") or "Bekliyor"),
+            "ch_kodu":     str(c.get("ch_kodu") or ""),
+            "ch_ismi":     str(c.get("ch_ismi") or ""),
+            "banka":       str(c.get("banka") or ""),
+            "sube":        str(c.get("sube") or ""),
+            "hesap_no":    str(c.get("hesap_no") or ""),
+            "para_birimi": str(c.get("para_birimi") or para_birimi),
         })
-    if rows:
-        sb.table("cekler").insert(rows).execute()
+    BATCH = 100
+    for i in range(0, len(rows), BATCH):
+        sb.table("cekler").insert(rows[i:i+BATCH]).execute()
