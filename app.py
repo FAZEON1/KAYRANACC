@@ -1080,7 +1080,7 @@ elif sayfa == "💳 Bu Hafta":
                     else:
                         hafta_id = hafta["id"]
                     odeme_ekle_manuel(
-                        hafta_id, firma, aciklama,
+                        hafta_id, firma, aciklama, "",
                         vade.isoformat(),
                         tutar_tl if tutar_tl > 0 else None,
                         tutar_usd if tutar_usd > 0 else None,
