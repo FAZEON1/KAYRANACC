@@ -47,20 +47,23 @@ def normalize_kategori(k):
     if not k:
         return "diger"
     kategori_map = {
-        "çek": "cek", "cek": "cek",
+        "cek": "cek", "c": "cek",
         "kredi": "kredi",
-        "kart": "kart", "k.kartı": "kart", "kredi kartı": "kart",
+        "kart": "kart", "k.karti": "kart", "kredi karti": "kart",
         "vergi": "vergi",
         "sgk": "sgk",
         "kira": "kira",
         "sabit": "sabit", "sabit gider": "sabit",
         "cari": "cari", "cari hesap": "cari",
-        "diger": "diger", "diğer": "diger",
+        "ithalat": "ithalat",
+        "ihracat": "ihracat",
+        "masraf": "masraf",
+        "maas": "maas", "odeme": "diger",
+        "diger": "diger",
     }
     s = str(k).lower().strip()
-    # Türkçe karakter normalize
     s = s.replace("ç", "c").replace("ş", "s").replace("ğ", "g")
-    s = s.replace("ü", "u").replace("ö", "o").replace("ı", "i").replace("İ", "i")
+    s = s.replace("ü", "u").replace("ö", "o").replace("ı", "i").replace("i̇", "i")
     return kategori_map.get(s, "diger")
 
 
@@ -116,8 +119,9 @@ def excel_yukle_odeme_listesi(file_bytes):
 
 def excel_yukle_cek_listesi(file_bytes):
     """
-    Firma çekleri dökümü Excel'i okur.
-    TL ve USD çeklerini ayrı listeler halinde döndürür.
+    Sutun sirasi: A=Sira No, B=Referans No, C=Tarih, D=Vade Tarihi,
+    E=Cek No, F=Meblagh, G=Odenen, H=Kalan, I=Para Birimi,
+    J=Son Pozisyon, K=C/H Kodu, L=C/H Ismi, M=Banka, N=Sube, O=Hesap No
     """
     try:
         df = pd.read_excel(BytesIO(file_bytes), header=None, dtype=str)
@@ -125,60 +129,70 @@ def excel_yukle_cek_listesi(file_bytes):
 
         tl_cekler = []
         usd_cekler = []
-        section = "tl"
 
-        for i, r in enumerate(rows[1:], start=2):
-            if not r:
-                continue
-            c2 = str(r[2]).upper() if len(r) > 2 and r[2] else ""
-            if "TL" in c2 and "USD" not in c2:
-                section = "tl"
-                continue
-            if "USD" in c2:
-                section = "usd"
+        for i, r in enumerate(rows):
+            if not r or all((str(v) in ("", "nan", "None") for v in r)):
                 continue
 
             try:
-                n = float(r[0])
-                if n <= 0:
+                sira = float(str(r[0]).strip())
+                if sira <= 0:
                     continue
             except Exception:
                 continue
 
-            ref = str(r[1]).strip() if r[1] and str(r[1]) != "nan" else ""
-            if not ref:
+            def cell(idx, default=""):
+                if len(r) > idx and r[idx] and str(r[idx]) not in ("nan", "None"):
+                    return str(r[idx]).strip()
+                return default
+
+            ref_no = cell(1)
+            if not ref_no:
                 continue
 
-            vade = parse_date(r[3]) if len(r) > 3 else None
-            meblagh = parse_num(r[4]) or 0
-            kalan = parse_num(r[6]) or 0 if len(r) > 6 else meblagh
-            alici = str(r[12]).strip() if len(r) > 12 and r[12] and str(r[12]) != "nan" else (
-                str(r[9]).strip() if len(r) > 9 and r[9] and str(r[9]) != "nan" else ""
-            )
-            durum = str(r[10]).strip() if len(r) > 10 and r[10] and str(r[10]) != "nan" else "Bekliyor"
-            tarih = parse_date(r[2]) if len(r) > 2 else None
+            tarih       = parse_date(cell(2)) or ""
+            vade        = parse_date(cell(3)) or ""
+            cek_no      = cell(4)
+            meblagh     = parse_num(cell(5)) or 0
+            odenen      = parse_num(cell(6)) or 0
+            kalan       = parse_num(cell(7)) or meblagh
+            para_birimi = cell(8, "TL").upper().strip()
+            pozisyon    = cell(9, "Bekliyor")
+            ch_kodu     = cell(10)
+            ch_ismi     = cell(11)
+            banka       = cell(12)
+            sube        = cell(13)
+            hesap_no    = cell(14)
+
+            if para_birimi not in ("TL", "USD"):
+                para_birimi = "TL"
 
             cek = {
-                "ref": ref,
-                "vade": vade or "",
-                "meblagh": meblagh,
-                "kalan": kalan,
-                "alici": alici,
-                "durum": durum,
-                "tarih": tarih or "",
+                "ref_no":      ref_no,
+                "cek_no":      cek_no,
+                "tarih":       tarih,
+                "vade":        vade,
+                "meblagh":     meblagh,
+                "odenen":      odenen,
+                "kalan":       kalan,
+                "para_birimi": para_birimi,
+                "durum":       pozisyon,
+                "ch_kodu":     ch_kodu,
+                "ch_ismi":     ch_ismi,
+                "banka":       banka,
+                "sube":        sube,
+                "hesap_no":    hesap_no,
             }
 
-            if section == "tl":
-                tl_cekler.append(cek)
-            else:
+            if para_birimi == "USD":
                 usd_cekler.append(cek)
+            else:
+                tl_cekler.append(cek)
 
         return tl_cekler, usd_cekler, []
 
     except Exception as e:
-        return [], [], [f"Çek dosyası okuma hatası: {str(e)}"]
-
-
+        return [], [], [f"Cek dosyasi okuma hatasi: {str(e)}"]
 def export_excel(odemeler, hafta_adi, kur=38.5):
     """Ödeme listesini Excel'e aktarır."""
     from openpyxl import Workbook

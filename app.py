@@ -570,15 +570,19 @@ if not giris_kontrol():
 GUNLER = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"]
 
 KATEGORILER = {
-    "cek":   {"label": "Çek",         "oncelik": 1, "renk": "#dc2626"},
-    "kredi": {"label": "Kredi",        "oncelik": 2, "renk": "#ea580c"},
-    "kart":  {"label": "K.Kartı",      "oncelik": 3, "renk": "#d97706"},
-    "vergi": {"label": "Vergi",        "oncelik": 4, "renk": "#7c3aed"},
-    "sgk":   {"label": "SGK",          "oncelik": 5, "renk": "#0891b2"},
-    "kira":  {"label": "Kira",         "oncelik": 6, "renk": "#059669"},
-    "sabit": {"label": "Sabit Gider",  "oncelik": 7, "renk": "#2563eb"},
-    "cari":  {"label": "Cari Hesap",   "oncelik": 8, "renk": "#be185d"},
-    "diger": {"label": "Diğer",        "oncelik": 9, "renk": "#6b7280"},
+    "cek":      {"label": "Çek",         "oncelik": 1, "renk": "#dc2626"},
+    "kredi":    {"label": "Kredi",        "oncelik": 2, "renk": "#ea580c"},
+    "kart":     {"label": "K.Kartı",      "oncelik": 3, "renk": "#d97706"},
+    "vergi":    {"label": "Vergi",        "oncelik": 4, "renk": "#7c3aed"},
+    "sgk":      {"label": "SGK",          "oncelik": 5, "renk": "#0891b2"},
+    "kira":     {"label": "Kira",         "oncelik": 6, "renk": "#059669"},
+    "sabit":    {"label": "Sabit Gider",  "oncelik": 7, "renk": "#2563eb"},
+    "cari":     {"label": "Cari Hesap",   "oncelik": 8, "renk": "#be185d"},
+    "ithalat":  {"label": "İthalat",      "oncelik": 9, "renk": "#0e7490"},
+    "ihracat":  {"label": "İhracat",      "oncelik": 10, "renk": "#15803d"},
+    "masraf":   {"label": "Masraf",       "oncelik": 11, "renk": "#92400e"},
+    "maas":     {"label": "Maaş",         "oncelik": 12, "renk": "#1e40af"},
+    "diger":    {"label": "Diğer",        "oncelik": 13, "renk": "#6b7280"},
 }
 
 
@@ -1430,33 +1434,80 @@ elif sayfa == "📋 Firma Çekleri":
     st.markdown('<div class="baslik">📋 Firma Çekleri</div>', unsafe_allow_html=True)
     st.markdown('<div class="alt-baslik">TL ve USD bazında çek takibi</div>', unsafe_allow_html=True)
 
+    def cek_ozet_kart(cekler, cur):
+        if not cekler:
+            return
+        sym = "$" if cur == "USD" else "₺"
+        toplam_meblagh = sum(c.get("meblagh") or 0 for c in cekler)
+        toplam_odenen  = sum(c.get("odenen") or 0 for c in cekler)
+        toplam_kalan   = sum(c.get("kalan") or 0 for c in cekler)
+        odendi_cnt     = sum(1 for c in cekler if str(c.get("durum","")).lower() in ("ödendi","odendi"))
+        ozet_html = (
+            '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">'
+            '<div style="background:#F8FAFC;border-radius:12px;padding:16px 18px;border:1px solid #E2E8F0;border-top:3px solid #3B82F6;text-align:center">'
+            '<div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#64748B;margin-bottom:8px">Toplam Meblağ</div>'
+            f'<div style="font-size:22px;font-weight:700;color:#1D4ED8;font-family:monospace">{sym}{fmt(toplam_meblagh)}</div>'
+            f'<div style="font-size:11px;margin-top:5px;color:#94A3B8">{len(cekler)} çek</div>'
+            '</div>'
+            '<div style="background:#F0FDF4;border-radius:12px;padding:16px 18px;border:1px solid #BBF7D0;border-top:3px solid #16A34A;text-align:center">'
+            '<div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#166534;margin-bottom:8px">Toplam Ödenen</div>'
+            f'<div style="font-size:22px;font-weight:700;color:#15803D;font-family:monospace">{sym}{fmt(toplam_odenen)}</div>'
+            f'<div style="font-size:11px;margin-top:5px;color:#16A34A">{odendi_cnt} adet ödendi</div>'
+            '</div>'
+            '<div style="background:#FFFBEB;border-radius:12px;padding:16px 18px;border:1px solid #FDE68A;border-top:3px solid #F59E0B;text-align:center">'
+            '<div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#92400E;margin-bottom:8px">Toplam Kalan</div>'
+            f'<div style="font-size:22px;font-weight:700;color:#78350F;font-family:monospace">{sym}{fmt(toplam_kalan)}</div>'
+            f'<div style="font-size:11px;margin-top:5px;color:#B45309">{len(cekler)-odendi_cnt} bekleyen</div>'
+            '</div>'
+            '</div>'
+        )
+        st.markdown(ozet_html, unsafe_allow_html=True)
+
     def cek_tablo(cekler, cur):
         if not cekler:
             st.info(f"{cur} çeki bulunamadı.")
             return
         sym = "$" if cur == "USD" else "₺"
+
+        cek_ozet_kart(cekler, cur)
+
         rows = []
         for c in cekler:
             vd = vade_durumu(c.get("vade"))
             rows.append({
-                "Ref No": c.get("ref_no") or c.get("ref", ""),
-                "Vade": fmt_tarih(c.get("vade")),
+                "Ref No":       c.get("ref_no") or c.get("ref", ""),
+                "Çek No":       c.get("cek_no", ""),
+                "Tarih":        fmt_tarih(c.get("tarih")),
+                "Vade Tarihi":  fmt_tarih(c.get("vade")),
                 f"Meblağ ({sym})": c.get("meblagh", 0),
-                f"Kalan ({sym})": c.get("kalan", 0),
-                "Alıcı": c.get("alici", ""),
-                "Durum": c.get("durum", "Bekliyor"),
+                f"Ödenen ({sym})": c.get("odenen", 0),
+                f"Kalan ({sym})":  c.get("kalan", 0),
+                "Son Pozisyon": c.get("durum", "Bekliyor"),
+                "C/H Kodu":     c.get("ch_kodu", ""),
+                "C/H İsmi":     c.get("ch_ismi", ""),
+                "Banka":        c.get("banka", ""),
+                "Şube":         c.get("sube", ""),
+                "Hesap No":     c.get("hesap_no", ""),
                 "_vd": vd,
             })
         df = pd.DataFrame(rows)
+
         def renk(row):
             vd = row.get("_vd", "")
-            if vd == "gecmis": return ["background-color:#FFCCCC"] * len(row)
-            if vd == "bugun":  return ["background-color:#FFF3E0"] * len(row)
-            if row.get("Durum") == "Ödendi": return ["background-color:#D1FAE5"] * len(row)
+            durum = str(row.get("Son Pozisyon", "")).lower()
+            if vd == "gecmis" and "odendi" not in durum:
+                return ["background-color:#FFCCCC"] * len(row)
+            if vd == "bugun" and "odendi" not in durum:
+                return ["background-color:#FFF3E0"] * len(row)
+            if "odendi" in durum:
+                return ["background-color:#D1FAE5"] * len(row)
+            if "ciro" in durum:
+                return ["background-color:#EFF6FF"] * len(row)
             return [""] * len(row)
+
         goster = [k for k in rows[0].keys() if k != "_vd"]
         styled = df[goster + ["_vd"]].style.apply(renk, axis=1).hide(axis="columns", subset=["_vd"])
-        st.dataframe(styled, use_container_width=True, hide_index=True)
+        st.dataframe(styled, use_container_width=True, hide_index=True, height=400)
 
     tab1, tab2 = st.tabs(["💴 TL Çekleri", "💵 USD Çekleri"])
     with tab1:

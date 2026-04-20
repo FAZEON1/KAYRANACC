@@ -170,7 +170,25 @@ def get_cekler(para_birimi="TL"):
     return res.data or []
 
 
-def cek_ekle_bulk(cekler):
+def cek_ekle_bulk(cekler, para_birimi="TL"):
     sb = get_client()
-    if cekler:
-        sb.table("cekler").insert(cekler).execute()
+    rows = []
+    for c in cekler:
+        rows.append({
+            "ref_no":    c.get("ref_no", ""),
+            "cek_no":    c.get("cek_no", ""),
+            "tarih":     c.get("tarih", ""),
+            "vade":      c.get("vade", ""),
+            "meblagh":   c.get("meblagh", 0),
+            "odenen":    c.get("odenen", 0),
+            "kalan":     c.get("kalan", 0),
+            "durum":     c.get("durum", "Bekliyor"),
+            "ch_kodu":   c.get("ch_kodu", ""),
+            "ch_ismi":   c.get("ch_ismi", ""),
+            "banka":     c.get("banka", ""),
+            "sube":      c.get("sube", ""),
+            "hesap_no":  c.get("hesap_no", ""),
+            "para_birimi": para_birimi,
+        })
+    if rows:
+        sb.table("cekler").insert(rows).execute()
