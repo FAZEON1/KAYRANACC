@@ -1,12 +1,14 @@
 import os
+import math
 import streamlit as st
 from supabase import create_client, Client
 from datetime import date
 
-# ── Supabase bağlantısı ──────────────────────────────────────────────
+# ── Supabase bağlantısı — cache ile tek seferlik oluştur ─────────────
+@st.cache_resource
 def get_client() -> Client:
-    url  = st.secrets["supabase"]["url"]
-    key  = st.secrets["supabase"]["service_role_key"]
+    url = st.secrets["supabase"]["url"]
+    key = st.secrets["supabase"]["service_role_key"]
     return create_client(url, key)
 
 
@@ -82,38 +84,42 @@ def get_hafta_ozet(hafta_id):
 
 
 def _temizle(v):
-    """Sayısal değerlerde None, NaN ve inf değerleri temizler."""
+    """Sayısal değerlerde None, NaN ve inf değerleri temizler. Native float döner."""
     import math
     if v is None:
         return None
     try:
+        if hasattr(v, 'item'):  # numpy tipi ise native'e çevir
+            v = v.item()
         f = float(v)
         if math.isnan(f) or math.isinf(f):
             return None
-        return f
+        return float(f)  # kesinlikle native float
     except (TypeError, ValueError):
         return None
 
 
 def _str(v, max_len=500):
-    """String alanlarını güvenli şekilde temizler — nan/None string'i boşa çevirir."""
+    """String alanlarını güvenli şekilde temizler."""
     if v is None:
         return ""
+    if hasattr(v, 'item'):
+        v = v.item()
     s = str(v).strip()
-    if s.lower() in ("nan", "none", "null", "nat"):
+    if s.lower() in ("nan", "none", "null", "nat", "<na>"):
         return ""
     return s[:max_len]
 
 
 def _vade(v):
-    """Vade tarihini temizler — boşsa None döner (Supabase NULL kabul eder)."""
+    """Vade tarihini YYYY-MM-DD string'ine çevirir. Boşsa None döner."""
     s = _str(v)
     if not s:
         return None
-    # YYYY-MM-DD formatında mı?
     try:
         import pandas as pd
         d = pd.to_datetime(s)
+        # pandas.Timestamp -> native string
         return d.strftime("%Y-%m-%d")
     except Exception:
         return None
@@ -139,7 +145,7 @@ def odeme_ekle_bulk(hafta_id, odemeler):
             "manuel":     int(o.get("manuel") or 0),
             "durum":      "bekliyor",
         })
-    BATCH = 50
+    BATCH = 25
     for i in range(0, len(rows), BATCH):
         sb.table("odemeler").insert(rows[i:i+BATCH]).execute()
 
@@ -233,6 +239,6 @@ def cek_ekle_bulk(cekler, para_birimi="TL"):
             "hesap_no":    _str(c.get("hesap_no")),
             "para_birimi": _str(c.get("para_birimi")) or para_birimi,
         })
-    BATCH = 50
+    BATCH = 25
     for i in range(0, len(rows), BATCH):
         sb.table("cekler").insert(rows[i:i+BATCH]).execute()

@@ -34,18 +34,21 @@ def parse_num(v):
     import math
     if v is None or v == "":
         return None
+    # numpy tipi ise native'e çevir
+    if hasattr(v, 'item'):
+        v = v.item()
     if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
         return None
     if isinstance(v, (int, float)):
         return float(v)
     try:
         s = str(v).strip().replace(" ", "").replace(".", "").replace(",", ".")
-        if s in ("", "nan", "none", "-"):
+        if s in ("", "nan", "none", "-", "nat"):
             return None
         result = float(s)
         if math.isnan(result) or math.isinf(result):
             return None
-        return result
+        return float(result)  # kesinlikle native float
     except Exception:
         return None
 
