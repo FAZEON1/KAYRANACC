@@ -82,16 +82,40 @@ def get_hafta_ozet(hafta_id):
 
 
 def _temizle(v):
-    """None, NaN ve inf değerleri temizler."""
+    """Sayısal değerlerde None, NaN ve inf değerleri temizler."""
+    import math
     if v is None:
         return None
     try:
-        import math
         f = float(v)
         if math.isnan(f) or math.isinf(f):
             return None
         return f
     except (TypeError, ValueError):
+        return None
+
+
+def _str(v, max_len=500):
+    """String alanlarını güvenli şekilde temizler — nan/None string'i boşa çevirir."""
+    if v is None:
+        return ""
+    s = str(v).strip()
+    if s.lower() in ("nan", "none", "null", "nat"):
+        return ""
+    return s[:max_len]
+
+
+def _vade(v):
+    """Vade tarihini temizler — boşsa None döner (Supabase NULL kabul eder)."""
+    s = _str(v)
+    if not s:
+        return None
+    # YYYY-MM-DD formatında mı?
+    try:
+        import pandas as pd
+        d = pd.to_datetime(s)
+        return d.strftime("%Y-%m-%d")
+    except Exception:
         return None
 
 
@@ -102,21 +126,20 @@ def odeme_ekle_bulk(hafta_id, odemeler):
         tl  = _temizle(o.get("tl"))
         usd = _temizle(o.get("usd"))
         if tl is None and usd is None:
-            continue  # tutarsız satırı atla
+            continue
         rows.append({
             "hafta_id":   int(hafta_id),
-            "firma":      str(o.get("firma") or "")[:500],
-            "aciklama":   str(o.get("aciklama") or "")[:500],
-            "cari_banka": str(o.get("cari_banka") or "")[:500],
-            "vade":       str(o.get("vade") or ""),
+            "firma":      _str(o.get("firma")),
+            "aciklama":   _str(o.get("aciklama")),
+            "cari_banka": _str(o.get("cari_banka")),
+            "vade":       _vade(o.get("vade")),
             "tutar_tl":   tl,
             "tutar_usd":  usd,
-            "kategori":   str(o.get("kategori") or "diger"),
+            "kategori":   _str(o.get("kategori")) or "diger",
             "manuel":     int(o.get("manuel") or 0),
             "durum":      "bekliyor",
         })
-    # Supabase free tier için 100'er satır halinde gönder
-    BATCH = 100
+    BATCH = 50
     for i in range(0, len(rows), BATCH):
         sb.table("odemeler").insert(rows[i:i+BATCH]).execute()
 
@@ -195,21 +218,21 @@ def cek_ekle_bulk(cekler, para_birimi="TL"):
     rows = []
     for c in cekler:
         rows.append({
-            "ref_no":      str(c.get("ref_no") or ""),
-            "cek_no":      str(c.get("cek_no") or ""),
-            "tarih":       str(c.get("tarih") or ""),
-            "vade":        str(c.get("vade") or ""),
+            "ref_no":      _str(c.get("ref_no")),
+            "cek_no":      _str(c.get("cek_no")),
+            "tarih":       _vade(c.get("tarih")),
+            "vade":        _vade(c.get("vade")),
             "meblagh":     _temizle(c.get("meblagh")) or 0,
             "odenen":      _temizle(c.get("odenen")) or 0,
             "kalan":       _temizle(c.get("kalan")) or 0,
-            "durum":       str(c.get("durum") or "Bekliyor"),
-            "ch_kodu":     str(c.get("ch_kodu") or ""),
-            "ch_ismi":     str(c.get("ch_ismi") or ""),
-            "banka":       str(c.get("banka") or ""),
-            "sube":        str(c.get("sube") or ""),
-            "hesap_no":    str(c.get("hesap_no") or ""),
-            "para_birimi": str(c.get("para_birimi") or para_birimi),
+            "durum":       _str(c.get("durum")) or "Bekliyor",
+            "ch_kodu":     _str(c.get("ch_kodu")),
+            "ch_ismi":     _str(c.get("ch_ismi")),
+            "banka":       _str(c.get("banka")),
+            "sube":        _str(c.get("sube")),
+            "hesap_no":    _str(c.get("hesap_no")),
+            "para_birimi": _str(c.get("para_birimi")) or para_birimi,
         })
-    BATCH = 100
+    BATCH = 50
     for i in range(0, len(rows), BATCH):
         sb.table("cekler").insert(rows[i:i+BATCH]).execute()

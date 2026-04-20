@@ -1705,38 +1705,43 @@ elif sayfa == "📂 Veri Yükleme":
             mesajlar = []
 
             if odeme_file:
-                file_bytes = odeme_file.read()
-                hafta_adi, odemeler, hatalar = excel_yukle_odeme_listesi(file_bytes)
+                try:
+                    file_bytes = odeme_file.read()
+                    hafta_adi, odemeler, hatalar = excel_yukle_odeme_listesi(file_bytes)
 
-                if hatalar:
-                    for h in hatalar:
-                        st.warning(h)
+                    if hatalar:
+                        for h in hatalar:
+                            st.warning(h)
 
-                if odemeler:
-                    hafta_id = hafta_ekle(hafta_adi or f"Hafta {len(get_tum_haftalar()) + 1}")
-                    odeme_ekle_bulk(hafta_id, odemeler)
-                    mesajlar.append(f"✅ {len(odemeler)} ödeme yüklendi — '{hafta_adi}'")
-                else:
-                    mesajlar.append("⚠️ Ödeme listesinde işlenebilir veri bulunamadı.")
+                    if odemeler:
+                        hafta_id = hafta_ekle(hafta_adi or f"Hafta {len(get_tum_haftalar()) + 1}")
+                        hafta_aktif_yap(hafta_id)
+                        odeme_ekle_bulk(hafta_id, odemeler)
+                        mesajlar.append(f"✅ {len(odemeler)} ödeme yüklendi — '{hafta_adi}'")
+                    else:
+                        mesajlar.append("⚠️ Ödeme listesinde işlenebilir veri bulunamadı.")
+                except Exception as e:
+                    st.error(f"❌ Ödeme yükleme hatası: {e}")
 
             if cek_file:
-                file_bytes = cek_file.read()
-                tl_cekler, usd_cekler, hatalar = excel_yukle_cek_listesi(file_bytes)
-                aktif = get_aktif_hafta()
-                hafta_id = aktif["id"] if aktif else None
+                try:
+                    file_bytes = cek_file.read()
+                    tl_cekler, usd_cekler, hatalar = excel_yukle_cek_listesi(file_bytes)
 
-                if hatalar:
-                    for h in hatalar:
-                        st.warning(h)
+                    if hatalar:
+                        for h in hatalar:
+                            st.warning(h)
 
-                if tl_cekler or usd_cekler:
-                    if tl_cekler and hafta_id:
-                        cek_ekle_bulk(hafta_id, tl_cekler, "TL")
-                    if usd_cekler and hafta_id:
-                        cek_ekle_bulk(hafta_id, usd_cekler, "USD")
-                    mesajlar.append(f"✅ Çekler yüklendi: TL {len(tl_cekler)} · USD {len(usd_cekler)}")
-                else:
-                    mesajlar.append("⚠️ Çek dosyasında veri bulunamadı.")
+                    if tl_cekler or usd_cekler:
+                        if tl_cekler:
+                            cek_ekle_bulk(tl_cekler, "TL")
+                        if usd_cekler:
+                            cek_ekle_bulk(usd_cekler, "USD")
+                        mesajlar.append(f"✅ Çekler yüklendi: TL {len(tl_cekler)} · USD {len(usd_cekler)}")
+                    else:
+                        mesajlar.append("⚠️ Çek dosyasında veri bulunamadı.")
+                except Exception as e:
+                    st.error(f"❌ Çek yükleme hatası: {e}")
 
             for m in mesajlar:
                 st.success(m) if m.startswith("✅") else st.warning(m)
