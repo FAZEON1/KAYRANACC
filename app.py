@@ -34,6 +34,7 @@ st.set_page_config(
 )
 
 initialize_db()
+st.write("DEBUG: App başladı!"); st.stop()
 
 # ── VERSION HASH (cache busting) ─────────────────────────────────────
 # Kodun hash'i deploy ile değiştiği için browser'ın eski CSS/JS cache'ini
