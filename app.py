@@ -627,240 +627,182 @@ def giris_kontrol():
 
 
 def giris_ekrani():
-    # Sidebar'ı giriş ekranında gizle
+    # Sadece bu sayfada geçerli özel stiller
     st.markdown("""
     <style>
         section[data-testid="stSidebar"] { display: none !important; }
         [data-testid="collapsedControl"] { display: none !important; }
-        header[data-testid="stHeader"] { background: transparent !important; border: none !important; box-shadow: none !important; }
+        header[data-testid="stHeader"] {
+            background: rgba(15,22,41,0.3) !important;
+            border: none !important;
+            box-shadow: none !important;
+            backdrop-filter: blur(8px) !important;
+        }
+        header[data-testid="stHeader"] * {
+            color: #F1F5F9 !important;
+            fill: #F1F5F9 !important;
+        }
         .main .block-container {
             padding-top: 0 !important;
+            padding-bottom: 0 !important;
             max-width: 100% !important;
-            padding-left: 0 !important;
-            padding-right: 0 !important;
+            padding-left: 3rem !important;
+            padding-right: 3rem !important;
         }
         .stApp {
             background: linear-gradient(135deg, #0F1629 0%, #1A2540 50%, #0F1629 100%) !important;
         }
-        /* Giriş formu alanları */
-        .giris-wrap input {
+        /* Form wrapper — sadece login sayfasında beyaz kart içinde */
+        .login-form-wrapper [data-testid="stForm"] {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+        }
+        .login-form-wrapper input {
             background: #F8FAFC !important;
             border: 1.5px solid #E2E8F0 !important;
             color: #0F172A !important;
             padding: 12px 16px !important;
             font-size: 14px !important;
             border-radius: 10px !important;
+            font-weight: 500 !important;
         }
-        .giris-wrap input:focus {
+        .login-form-wrapper input:focus {
             border-color: #3B82F6 !important;
             box-shadow: 0 0 0 3px rgba(59,130,246,0.15) !important;
         }
-        .giris-wrap label p {
+        .login-form-wrapper label p {
             color: #475569 !important;
-            font-size: 12px !important;
-            font-weight: 600 !important;
-            letter-spacing: .3px !important;
+            font-size: 11px !important;
+            font-weight: 700 !important;
+            letter-spacing: .5px !important;
+            text-transform: uppercase !important;
         }
-        .giris-wrap button[kind="primary"] {
+        .login-form-wrapper button[kind="primary"] {
             background: linear-gradient(135deg, #2563EB, #1D4ED8) !important;
             color: white !important;
             font-weight: 700 !important;
             font-size: 14px !important;
             padding: 12px !important;
+            border: none !important;
+            border-radius: 10px !important;
             box-shadow: 0 4px 12px rgba(37,99,235,0.4) !important;
         }
-        .giris-wrap button[kind="primary"]:hover {
+        .login-form-wrapper button[kind="primary"]:hover {
             transform: translateY(-1px) !important;
             box-shadow: 0 6px 18px rgba(37,99,235,0.5) !important;
         }
     </style>
     """, unsafe_allow_html=True)
 
-    # İki kolonlu ana layout: Sol brand, Sağ form
     col_sol, col_sag = st.columns([1.1, 1], gap="large")
 
     with col_sol:
         st.markdown("""
-        <div style="
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            padding: 60px 50px;
-        ">
-            <div style="
-                display: inline-flex;
-                align-items: center;
-                gap: 12px;
-                margin-bottom: 36px;
-            ">
-                <div style="
-                    width: 52px; height: 52px;
-                    background: linear-gradient(135deg, #3B82F6, #6366F1);
-                    border-radius: 14px;
-                    display: flex; align-items: center; justify-content: center;
-                    font-size: 26px;
-                    box-shadow: 0 8px 24px rgba(59,130,246,0.35);
-                ">💳</div>
-                <div>
-                    <div style="font-size: 22px; font-weight: 800; color: #F8FAFC; letter-spacing: -.5px;">KAYRANACC</div>
-                    <div style="font-size: 11px; color: #94A3B8; font-weight: 500; letter-spacing: 1px; text-transform: uppercase;">Finance Suite</div>
-                </div>
-            </div>
-
-            <h1 style="
-                font-size: 42px;
-                font-weight: 800;
-                color: #F8FAFC;
-                line-height: 1.15;
-                letter-spacing: -1.5px;
-                margin: 0 0 20px 0;
-            ">
-                Ödemelerinizi<br>
-                <span style="background: linear-gradient(135deg, #60A5FA, #818CF8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">profesyonelce</span> yönetin
-            </h1>
-
-            <p style="
-                font-size: 15px;
-                color: #CBD5E1;
-                line-height: 1.6;
-                max-width: 460px;
-                margin-bottom: 36px;
-            ">
-                Haftalık ödeme takibi, nakit akış analizi, banka bakiye yönetimi ve
-                firma çek yönetimi — tek bir platformda.
-            </p>
-
-            <div style="display: flex; flex-direction: column; gap: 14px; max-width: 420px;">
-                <div style="display: flex; align-items: flex-start; gap: 12px;">
-                    <div style="
-                        width: 28px; height: 28px;
-                        background: rgba(59,130,246,0.2);
-                        border: 1px solid rgba(59,130,246,0.4);
-                        border-radius: 8px;
-                        display: flex; align-items: center; justify-content: center;
-                        color: #60A5FA; font-weight: 700; font-size: 13px;
-                        flex-shrink: 0;
-                    ">📊</div>
-                    <div>
-                        <div style="color: #F1F5F9; font-size: 13px; font-weight: 600;">Anlık Dashboard</div>
-                        <div style="color: #94A3B8; font-size: 12px; margin-top: 2px;">Haftalık özet, alarmlar ve ilerleme takibi</div>
-                    </div>
-                </div>
-                <div style="display: flex; align-items: flex-start; gap: 12px;">
-                    <div style="
-                        width: 28px; height: 28px;
-                        background: rgba(16,185,129,0.2);
-                        border: 1px solid rgba(16,185,129,0.4);
-                        border-radius: 8px;
-                        display: flex; align-items: center; justify-content: center;
-                        font-size: 13px;
-                        flex-shrink: 0;
-                    ">💸</div>
-                    <div>
-                        <div style="color: #F1F5F9; font-size: 13px; font-weight: 600;">Nakit Akış Analizi</div>
-                        <div style="color: #94A3B8; font-size: 12px; margin-top: 2px;">Günlük kümülatif projeksiyon ve grafikler</div>
-                    </div>
-                </div>
-                <div style="display: flex; align-items: flex-start; gap: 12px;">
-                    <div style="
-                        width: 28px; height: 28px;
-                        background: rgba(139,92,246,0.2);
-                        border: 1px solid rgba(139,92,246,0.4);
-                        border-radius: 8px;
-                        display: flex; align-items: center; justify-content: center;
-                        font-size: 13px;
-                        flex-shrink: 0;
-                    ">🔒</div>
-                    <div>
-                        <div style="color: #F1F5F9; font-size: 13px; font-weight: 600;">Güvenli Erişim</div>
-                        <div style="color: #94A3B8; font-size: 12px; margin-top: 2px;">Bulut senkronizasyonlu, şifre korumalı</div>
-                    </div>
-                </div>
-            </div>
-        </div>
+<div style="min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:60px 20px 60px 20px;">
+  <div style="display:inline-flex;align-items:center;gap:12px;margin-bottom:36px;">
+    <div style="width:52px;height:52px;background:linear-gradient(135deg,#3B82F6,#6366F1);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;box-shadow:0 8px 24px rgba(59,130,246,0.35);">💳</div>
+    <div>
+      <div style="font-size:22px;font-weight:800;color:#F8FAFC;letter-spacing:-.5px;">KAYRANACC</div>
+      <div style="font-size:11px;color:#94A3B8;font-weight:500;letter-spacing:1px;text-transform:uppercase;">Finance Suite</div>
+    </div>
+  </div>
+  <h1 style="font-size:42px;font-weight:800;color:#F8FAFC;line-height:1.15;letter-spacing:-1.5px;margin:0 0 20px 0;">
+    Ödemelerinizi<br>
+    <span style="background:linear-gradient(135deg,#60A5FA,#818CF8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">profesyonelce</span> yönetin
+  </h1>
+  <p style="font-size:15px;color:#CBD5E1;line-height:1.6;max-width:460px;margin-bottom:36px;">
+    Haftalık ödeme takibi, nakit akış analizi, banka bakiye yönetimi ve firma çek yönetimi — tek bir platformda.
+  </p>
+  <div style="display:flex;flex-direction:column;gap:14px;max-width:420px;">
+    <div style="display:flex;align-items:flex-start;gap:12px;">
+      <div style="width:28px;height:28px;background:rgba(59,130,246,0.2);border:1px solid rgba(59,130,246,0.4);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">📊</div>
+      <div>
+        <div style="color:#F1F5F9;font-size:13px;font-weight:600;">Anlık Dashboard</div>
+        <div style="color:#94A3B8;font-size:12px;margin-top:2px;">Haftalık özet, alarmlar ve ilerleme takibi</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:12px;">
+      <div style="width:28px;height:28px;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.4);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">💸</div>
+      <div>
+        <div style="color:#F1F5F9;font-size:13px;font-weight:600;">Nakit Akış Analizi</div>
+        <div style="color:#94A3B8;font-size:12px;margin-top:2px;">Günlük kümülatif projeksiyon ve grafikler</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:12px;">
+      <div style="width:28px;height:28px;background:rgba(139,92,246,0.2);border:1px solid rgba(139,92,246,0.4);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">🔒</div>
+      <div>
+        <div style="color:#F1F5F9;font-size:13px;font-weight:600;">Güvenli Erişim</div>
+        <div style="color:#94A3B8;font-size:12px;margin-top:2px;">Bulut senkronizasyonlu, şifre korumalı</div>
+      </div>
+    </div>
+  </div>
+</div>
         """, unsafe_allow_html=True)
 
     with col_sag:
+        # Dikey ortalama için üstten boşluk
+        st.markdown("<div style='height:100px;'></div>", unsafe_allow_html=True)
+
+        # Form kartının ÜST kısmı (açık div'ler KAPALI tutulacak)
         st.markdown("""
-        <div style="min-height: 100vh; display: flex; align-items: center; padding: 40px 40px 40px 0;">
-            <div class="giris-wrap" style="
-                width: 100%;
-                max-width: 420px;
-                margin: 0 auto;
-                background: white;
-                border-radius: 20px;
-                padding: 44px 40px;
-                box-shadow: 0 24px 48px rgba(0,0,0,0.25), 0 8px 16px rgba(0,0,0,0.1);
-                border: 1px solid rgba(255,255,255,0.1);
-            ">
-                <div style="
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 8px;
-                    padding: 6px 14px;
-                    background: #EFF6FF;
-                    border: 1px solid #BFDBFE;
-                    border-radius: 20px;
-                    margin-bottom: 20px;
-                ">
-                    <span style="width:6px;height:6px;background:#22C55E;border-radius:50%;box-shadow:0 0 0 3px rgba(34,197,94,0.2);"></span>
-                    <span style="font-size:11px;font-weight:600;color:#1E40AF;letter-spacing:.3px;">SİSTEM HAZIR</span>
-                </div>
-                <h2 style="
-                    font-size: 26px;
-                    font-weight: 800;
-                    color: #0F172A;
-                    margin: 0 0 6px 0;
-                    letter-spacing: -.8px;
-                ">Hoş Geldiniz 👋</h2>
-                <p style="font-size: 13px; color: #64748B; margin: 0 0 28px 0; line-height: 1.5;">
-                    Devam etmek için kullanıcı adı ve şifrenizi girin.
-                </p>
+<div style="display:flex;justify-content:center;padding:0 20px;">
+  <div style="width:100%;max-width:420px;background:white;border-radius:20px;padding:40px 36px 32px 36px;box-shadow:0 24px 48px rgba(0,0,0,0.25),0 8px 16px rgba(0,0,0,0.1);">
+    <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:20px;margin-bottom:20px;">
+      <span style="width:6px;height:6px;background:#22C55E;border-radius:50%;box-shadow:0 0 0 3px rgba(34,197,94,0.2);"></span>
+      <span style="font-size:11px;font-weight:700;color:#1E40AF;letter-spacing:.3px;">SİSTEM HAZIR</span>
+    </div>
+    <h2 style="font-size:26px;font-weight:800;color:#0F172A;margin:0 0 6px 0;letter-spacing:-.8px;">Hoş Geldiniz 👋</h2>
+    <p style="font-size:13px;color:#64748B;margin:0 0 24px 0;line-height:1.5;">Devam etmek için kullanıcı adı ve şifrenizi girin.</p>
+  </div>
+</div>
         """, unsafe_allow_html=True)
 
-        with st.container():
-            st.markdown('<div class="giris-wrap">', unsafe_allow_html=True)
-            with st.form("giris_form"):
-                kullanici = st.text_input("KULLANICI ADI", placeholder="kullanici_adi")
-                sifre = st.text_input("ŞİFRE", type="password", placeholder="••••••••")
-                giris_btn = st.form_submit_button("Giriş Yap →", type="primary", use_container_width=True)
+        # Form — negative margin ile yukarıdaki kartın içine girecek
+        st.markdown("""
+<style>
+  .login-form-wrapper {
+    max-width: 420px;
+    margin: -40px auto 0 auto;
+    padding: 0 56px 32px 56px;
+  }
+</style>
+<div class="login-form-wrapper">
+        """, unsafe_allow_html=True)
 
-                if giris_btn:
-                    try:
-                        kullanicilar = st.secrets.get("kullanicilar", {})
-                        if not kullanicilar:
-                            st.warning("⚠️ Kullanıcı ayarları yapılandırılmamış.")
-                            st.code("""
+        with st.form("giris_form"):
+            kullanici = st.text_input("Kullanıcı Adı", placeholder="kullanici_adi")
+            sifre = st.text_input("Şifre", type="password", placeholder="••••••••")
+            giris_btn = st.form_submit_button("Giriş Yap →", type="primary", use_container_width=True)
+
+            if giris_btn:
+                try:
+                    kullanicilar = st.secrets.get("kullanicilar", {})
+                    if not kullanicilar:
+                        st.warning("⚠️ Kullanıcı ayarları yapılandırılmamış.")
+                        st.code("""
 # Streamlit Secrets'a ekle:
 [kullanicilar]
 ibrahim = "sifreniz"
 """)
-                            return
-                        if kullanici in kullanicilar and kullanicilar[kullanici] == sifre:
-                            st.session_state.giris_yapildi = True
-                            st.session_state.aktif_kullanici = kullanici
-                            st.rerun()
-                        else:
-                            st.error("❌ Kullanıcı adı veya şifre hatalı.")
-                    except Exception as e:
-                        st.error(f"Giriş hatası: {e}")
-            st.markdown('</div>', unsafe_allow_html=True)
+                        return
+                    if kullanici in kullanicilar and kullanicilar[kullanici] == sifre:
+                        st.session_state.giris_yapildi = True
+                        st.session_state.aktif_kullanici = kullanici
+                        st.rerun()
+                    else:
+                        st.error("❌ Kullanıcı adı veya şifre hatalı.")
+                except Exception as e:
+                    st.error(f"Giriş hatası: {e}")
 
         st.markdown("""
-                <div style="
-                    margin-top: 24px;
-                    padding-top: 20px;
-                    border-top: 1px solid #F1F5F9;
-                    text-align: center;
-                ">
-                    <div style="font-size: 11px; color: #94A3B8; letter-spacing: .5px;">
-                        © 2026 KAYRANACC · Finance Management System
-                    </div>
-                </div>
-            </div>
-        </div>
+</div>
+<div style="max-width:420px;margin:16px auto 0 auto;padding:0 20px;text-align:center;">
+  <div style="font-size:11px;color:#94A3B8;letter-spacing:.5px;">© 2026 KAYRANACC · Finance Management System</div>
+</div>
         """, unsafe_allow_html=True)
+
 
 
 if not giris_kontrol():
