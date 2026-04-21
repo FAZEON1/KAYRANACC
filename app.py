@@ -35,6 +35,31 @@ st.set_page_config(
 
 initialize_db()
 
+# ── VERSION HASH (cache busting) ─────────────────────────────────────
+# Kodun hash'i deploy ile değiştiği için browser'ın eski CSS/JS cache'ini
+# otomatik olarak patlatır. GitHub'a her push sonrası yeni hash → yeni asset.
+import hashlib
+def _get_app_version():
+    try:
+        # Çalışan dosyanın içeriğini hash'le
+        with open(__file__, 'rb') as f:
+            return hashlib.md5(f.read()).hexdigest()[:8]
+    except Exception:
+        # Son çare: deploy zamanı
+        return datetime.now().strftime("%Y%m%d%H%M")
+
+APP_VERSION = _get_app_version()
+
+# ── Cache kontrol meta etiketleri ────────────────────────────────────
+# Tarayıcının agresif cache'lemesini engeller
+st.markdown(f"""
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+<meta name="app-version" content="{APP_VERSION}" />
+<!-- v{APP_VERSION} -->
+""", unsafe_allow_html=True)
+
 # ── CSS ──────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
@@ -1017,6 +1042,40 @@ with st.sidebar:
             st.error("❌ Bağlanamadı, manuel girin.")
 
     st.markdown(f"<small>🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}</small>", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Uygulamayı Yenile (Browser cache'i temizle + veri yenile) ──
+    st.markdown("**⚙️ Sistem**")
+    if st.button("🔄 Uygulamayı Yenile", use_container_width=True, help="Verileri ve arayüzü tazele"):
+        # Session state'i temizle (kullanıcı bilgisi hariç)
+        korunacak = {"giris_yapildi", "aktif_kullanici"}
+        for k in list(st.session_state.keys()):
+            if k not in korunacak:
+                del st.session_state[k]
+        # Streamlit cache'lerini temizle
+        try:
+            st.cache_data.clear()
+        except Exception:
+            pass
+        # JavaScript ile tarayıcı hard-reload (cache bypass)
+        st.markdown("""
+        <script>
+            if (window.parent && window.parent.location) {
+                window.parent.location.reload(true);
+            } else {
+                location.reload(true);
+            }
+        </script>
+        """, unsafe_allow_html=True)
+        st.rerun()
+
+    # Versiyon bilgisi (küçük, alt köşe)
+    st.markdown(
+        f'<div style="font-size:10px;color:#475569;margin-top:8px;text-align:center;'
+        f'letter-spacing:.5px;font-family:monospace;opacity:0.6;">v{APP_VERSION}</div>',
+        unsafe_allow_html=True
+    )
 
 
 # ════════════════════════════════════════════════════════════════════
