@@ -31,7 +31,6 @@ except Exception as _e:
     st.error(f"IMPORT HATASI: {type(_e).__name__}: {_e}")
     st.code(_tb.format_exc())
     st.stop()
-)
 
 # ── Sayfa ayarları ──────────────────────────────────────────────────
 st.set_page_config(
