@@ -13,7 +13,7 @@ from database import (
     get_hafta_odemeler, odeme_ekle_bulk, odeme_ekle_manuel,
     odeme_durum_guncelle, odeme_sil, get_hafta_ozet,
     get_bankalar, banka_ekle, banka_guncelle, banka_sil,
-    get_cekler, cek_ekle_bulk,
+    get_cekler, cek_ekle_bulk, cek_sil, cek_sil_hepsi,
 )
 from excel_islemler import (
     excel_yukle_odeme_listesi, excel_yukle_cek_listesi,
@@ -394,16 +394,54 @@ div[data-testid="stAlert"] {
     line-height: 1.6 !important;
 }
 
-/* ── STREAMLIT HEADER ── */
+/* ── STREAMLIT HEADER — İkonlar net görünsün ── */
 header[data-testid="stHeader"] {
-    background: rgba(248,250,255,0.98) !important;
+    background: #FFFFFF !important;
     backdrop-filter: blur(10px) !important;
     border-bottom: 1px solid #E2E8F0 !important;
+    height: 3rem !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
 }
-header[data-testid="stHeader"] button,
-header[data-testid="stHeader"] a,
+header[data-testid="stHeader"] * {
+    color: #0F172A !important;
+    fill: #0F172A !important;
+    opacity: 1 !important;
+}
+header[data-testid="stHeader"] button {
+    background: transparent !important;
+    color: #334155 !important;
+    border: 1px solid transparent !important;
+    border-radius: 8px !important;
+    padding: 6px 12px !important;
+    font-weight: 600 !important;
+    font-size: 13px !important;
+    transition: all .15s !important;
+}
+header[data-testid="stHeader"] button:hover {
+    background: #F1F5F9 !important;
+    border-color: #CBD5E1 !important;
+    color: #0F172A !important;
+}
 header[data-testid="stHeader"] svg {
     color: #334155 !important;
+    fill: #334155 !important;
+    width: 18px !important;
+    height: 18px !important;
+    opacity: 1 !important;
+}
+header[data-testid="stHeader"] a {
+    color: #334155 !important;
+}
+/* Share butonu özellikle */
+header[data-testid="stHeader"] [data-testid="stBaseButton-header"] {
+    color: #0F172A !important;
+    background: #F8FAFC !important;
+    border: 1px solid #E2E8F0 !important;
+}
+/* Menü (3 nokta) ikonu */
+[data-testid="stToolbarActions"] * {
+    color: #334155 !important;
+    fill: #334155 !important;
     opacity: 1 !important;
 }
 
@@ -481,12 +519,77 @@ div[data-testid="stAlert"] p { color: inherit !important; }
     border-color: #CBD5E1 !important;
 }
 
-/* ── SELECTBOX DROPDOWN ── */
-[data-baseweb="select"] > div { background: white !important; color: #0F172A !important; }
-[data-baseweb="popover"], [data-baseweb="menu"] { background: white !important; }
-[data-baseweb="option"] { background: white !important; color: #0F172A !important; }
-[data-baseweb="option"]:hover { background: #EFF6FF !important; }
-[data-baseweb="select"] span { color: #0F172A !important; }
+/* ── SELECTBOX DROPDOWN — Karanlık açılır paneli düzelt ── */
+[data-baseweb="select"] > div {
+    background: white !important;
+    color: #0F172A !important;
+    border: 1.5px solid #E2E8F0 !important;
+    border-radius: 10px !important;
+}
+[data-baseweb="select"] > div:hover {
+    border-color: #CBD5E1 !important;
+}
+[data-baseweb="select"] span {
+    color: #0F172A !important;
+    font-weight: 500 !important;
+}
+[data-baseweb="select"] svg {
+    color: #64748B !important;
+    fill: #64748B !important;
+}
+
+/* Açılır liste popover */
+[data-baseweb="popover"] {
+    background: white !important;
+    border-radius: 10px !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08) !important;
+    border: 1px solid #E2E8F0 !important;
+}
+[data-baseweb="popover"] * {
+    background-color: transparent !important;
+    color: #0F172A !important;
+}
+[data-baseweb="menu"] {
+    background: white !important;
+    padding: 4px !important;
+    border-radius: 8px !important;
+}
+[data-baseweb="menu"] * {
+    color: #0F172A !important;
+}
+[data-baseweb="menu"] li,
+[role="option"] {
+    background: white !important;
+    color: #0F172A !important;
+    padding: 8px 12px !important;
+    border-radius: 6px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    transition: background .15s !important;
+}
+[data-baseweb="menu"] li:hover,
+[role="option"]:hover,
+[role="option"][aria-selected="true"] {
+    background: #EFF6FF !important;
+    color: #1E40AF !important;
+}
+[data-baseweb="option"] {
+    background: white !important;
+    color: #0F172A !important;
+}
+[data-baseweb="option"]:hover {
+    background: #EFF6FF !important;
+    color: #1E40AF !important;
+}
+/* Açık bir şekilde koyu renk oluşumlarını engelle */
+ul[role="listbox"] {
+    background: white !important;
+    border: 1px solid #E2E8F0 !important;
+}
+ul[role="listbox"] li {
+    background: white !important;
+    color: #0F172A !important;
+}
 
 /* ── NUMBER / TEXT / DATE INPUT ── */
 [data-testid="stNumberInput"] input,
@@ -524,42 +627,240 @@ def giris_kontrol():
 
 
 def giris_ekrani():
+    # Sidebar'ı giriş ekranında gizle
     st.markdown("""
-    <div style="max-width:400px;margin:80px auto 0;background:white;border-radius:16px;
-                padding:40px;box-shadow:0 4px 24px rgba(0,0,0,0.10);border:1px solid #E0E0E0;">
-        <div style="font-size:28px;font-weight:800;color:#0B1437;margin-bottom:4px;">💳 KAYRANACC</div>
-        <div style="font-size:13px;color:#757575;margin-bottom:24px;">Ödeme Takip Sistemi</div>
-    </div>
+    <style>
+        section[data-testid="stSidebar"] { display: none !important; }
+        [data-testid="collapsedControl"] { display: none !important; }
+        header[data-testid="stHeader"] { background: transparent !important; border: none !important; box-shadow: none !important; }
+        .main .block-container {
+            padding-top: 0 !important;
+            max-width: 100% !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+        }
+        .stApp {
+            background: linear-gradient(135deg, #0F1629 0%, #1A2540 50%, #0F1629 100%) !important;
+        }
+        /* Giriş formu alanları */
+        .giris-wrap input {
+            background: #F8FAFC !important;
+            border: 1.5px solid #E2E8F0 !important;
+            color: #0F172A !important;
+            padding: 12px 16px !important;
+            font-size: 14px !important;
+            border-radius: 10px !important;
+        }
+        .giris-wrap input:focus {
+            border-color: #3B82F6 !important;
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.15) !important;
+        }
+        .giris-wrap label p {
+            color: #475569 !important;
+            font-size: 12px !important;
+            font-weight: 600 !important;
+            letter-spacing: .3px !important;
+        }
+        .giris-wrap button[kind="primary"] {
+            background: linear-gradient(135deg, #2563EB, #1D4ED8) !important;
+            color: white !important;
+            font-weight: 700 !important;
+            font-size: 14px !important;
+            padding: 12px !important;
+            box-shadow: 0 4px 12px rgba(37,99,235,0.4) !important;
+        }
+        .giris-wrap button[kind="primary"]:hover {
+            transform: translateY(-1px) !important;
+            box-shadow: 0 6px 18px rgba(37,99,235,0.5) !important;
+        }
+    </style>
     """, unsafe_allow_html=True)
 
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        with st.form("giris_form"):
-            st.markdown("### 🔐 Giriş Yap")
-            kullanici = st.text_input("Kullanıcı Adı", placeholder="kullanici_adi")
-            sifre = st.text_input("Şifre", type="password", placeholder="••••••••")
-            giris_btn = st.form_submit_button("Giriş Yap", type="primary", use_container_width=True)
+    # İki kolonlu ana layout: Sol brand, Sağ form
+    col_sol, col_sag = st.columns([1.1, 1], gap="large")
 
-            if giris_btn:
-                try:
-                    kullanicilar = st.secrets.get("kullanicilar", {})
-                    if not kullanicilar:
-                        st.warning("⚠️ Kullanıcı ayarları yapılandırılmamış.")
-                        st.code("""
+    with col_sol:
+        st.markdown("""
+        <div style="
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 60px 50px;
+        ">
+            <div style="
+                display: inline-flex;
+                align-items: center;
+                gap: 12px;
+                margin-bottom: 36px;
+            ">
+                <div style="
+                    width: 52px; height: 52px;
+                    background: linear-gradient(135deg, #3B82F6, #6366F1);
+                    border-radius: 14px;
+                    display: flex; align-items: center; justify-content: center;
+                    font-size: 26px;
+                    box-shadow: 0 8px 24px rgba(59,130,246,0.35);
+                ">💳</div>
+                <div>
+                    <div style="font-size: 22px; font-weight: 800; color: #F8FAFC; letter-spacing: -.5px;">KAYRANACC</div>
+                    <div style="font-size: 11px; color: #94A3B8; font-weight: 500; letter-spacing: 1px; text-transform: uppercase;">Finance Suite</div>
+                </div>
+            </div>
+
+            <h1 style="
+                font-size: 42px;
+                font-weight: 800;
+                color: #F8FAFC;
+                line-height: 1.15;
+                letter-spacing: -1.5px;
+                margin: 0 0 20px 0;
+            ">
+                Ödemelerinizi<br>
+                <span style="background: linear-gradient(135deg, #60A5FA, #818CF8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">profesyonelce</span> yönetin
+            </h1>
+
+            <p style="
+                font-size: 15px;
+                color: #CBD5E1;
+                line-height: 1.6;
+                max-width: 460px;
+                margin-bottom: 36px;
+            ">
+                Haftalık ödeme takibi, nakit akış analizi, banka bakiye yönetimi ve
+                firma çek yönetimi — tek bir platformda.
+            </p>
+
+            <div style="display: flex; flex-direction: column; gap: 14px; max-width: 420px;">
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    <div style="
+                        width: 28px; height: 28px;
+                        background: rgba(59,130,246,0.2);
+                        border: 1px solid rgba(59,130,246,0.4);
+                        border-radius: 8px;
+                        display: flex; align-items: center; justify-content: center;
+                        color: #60A5FA; font-weight: 700; font-size: 13px;
+                        flex-shrink: 0;
+                    ">📊</div>
+                    <div>
+                        <div style="color: #F1F5F9; font-size: 13px; font-weight: 600;">Anlık Dashboard</div>
+                        <div style="color: #94A3B8; font-size: 12px; margin-top: 2px;">Haftalık özet, alarmlar ve ilerleme takibi</div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    <div style="
+                        width: 28px; height: 28px;
+                        background: rgba(16,185,129,0.2);
+                        border: 1px solid rgba(16,185,129,0.4);
+                        border-radius: 8px;
+                        display: flex; align-items: center; justify-content: center;
+                        font-size: 13px;
+                        flex-shrink: 0;
+                    ">💸</div>
+                    <div>
+                        <div style="color: #F1F5F9; font-size: 13px; font-weight: 600;">Nakit Akış Analizi</div>
+                        <div style="color: #94A3B8; font-size: 12px; margin-top: 2px;">Günlük kümülatif projeksiyon ve grafikler</div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    <div style="
+                        width: 28px; height: 28px;
+                        background: rgba(139,92,246,0.2);
+                        border: 1px solid rgba(139,92,246,0.4);
+                        border-radius: 8px;
+                        display: flex; align-items: center; justify-content: center;
+                        font-size: 13px;
+                        flex-shrink: 0;
+                    ">🔒</div>
+                    <div>
+                        <div style="color: #F1F5F9; font-size: 13px; font-weight: 600;">Güvenli Erişim</div>
+                        <div style="color: #94A3B8; font-size: 12px; margin-top: 2px;">Bulut senkronizasyonlu, şifre korumalı</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_sag:
+        st.markdown("""
+        <div style="min-height: 100vh; display: flex; align-items: center; padding: 40px 40px 40px 0;">
+            <div class="giris-wrap" style="
+                width: 100%;
+                max-width: 420px;
+                margin: 0 auto;
+                background: white;
+                border-radius: 20px;
+                padding: 44px 40px;
+                box-shadow: 0 24px 48px rgba(0,0,0,0.25), 0 8px 16px rgba(0,0,0,0.1);
+                border: 1px solid rgba(255,255,255,0.1);
+            ">
+                <div style="
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 6px 14px;
+                    background: #EFF6FF;
+                    border: 1px solid #BFDBFE;
+                    border-radius: 20px;
+                    margin-bottom: 20px;
+                ">
+                    <span style="width:6px;height:6px;background:#22C55E;border-radius:50%;box-shadow:0 0 0 3px rgba(34,197,94,0.2);"></span>
+                    <span style="font-size:11px;font-weight:600;color:#1E40AF;letter-spacing:.3px;">SİSTEM HAZIR</span>
+                </div>
+                <h2 style="
+                    font-size: 26px;
+                    font-weight: 800;
+                    color: #0F172A;
+                    margin: 0 0 6px 0;
+                    letter-spacing: -.8px;
+                ">Hoş Geldiniz 👋</h2>
+                <p style="font-size: 13px; color: #64748B; margin: 0 0 28px 0; line-height: 1.5;">
+                    Devam etmek için kullanıcı adı ve şifrenizi girin.
+                </p>
+        """, unsafe_allow_html=True)
+
+        with st.container():
+            st.markdown('<div class="giris-wrap">', unsafe_allow_html=True)
+            with st.form("giris_form"):
+                kullanici = st.text_input("KULLANICI ADI", placeholder="kullanici_adi")
+                sifre = st.text_input("ŞİFRE", type="password", placeholder="••••••••")
+                giris_btn = st.form_submit_button("Giriş Yap →", type="primary", use_container_width=True)
+
+                if giris_btn:
+                    try:
+                        kullanicilar = st.secrets.get("kullanicilar", {})
+                        if not kullanicilar:
+                            st.warning("⚠️ Kullanıcı ayarları yapılandırılmamış.")
+                            st.code("""
 # Streamlit Secrets'a ekle:
 [kullanicilar]
 ibrahim = "sifreniz"
 """)
-                        return
-                    if kullanici in kullanicilar and kullanicilar[kullanici] == sifre:
-                        st.session_state.giris_yapildi = True
-                        st.session_state.aktif_kullanici = kullanici
-                        st.rerun()
-                    else:
-                        st.error("❌ Kullanıcı adı veya şifre hatalı.")
-                except Exception as e:
-                    st.error(f"Giriş hatası: {e}")
+                            return
+                        if kullanici in kullanicilar and kullanicilar[kullanici] == sifre:
+                            st.session_state.giris_yapildi = True
+                            st.session_state.aktif_kullanici = kullanici
+                            st.rerun()
+                        else:
+                            st.error("❌ Kullanıcı adı veya şifre hatalı.")
+                    except Exception as e:
+                        st.error(f"Giriş hatası: {e}")
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        st.markdown("""
+                <div style="
+                    margin-top: 24px;
+                    padding-top: 20px;
+                    border-top: 1px solid #F1F5F9;
+                    text-align: center;
+                ">
+                    <div style="font-size: 11px; color: #94A3B8; letter-spacing: .5px;">
+                        © 2026 KAYRANACC · Finance Management System
+                    </div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 if not giris_kontrol():
@@ -967,18 +1268,32 @@ if sayfa == "📊 Dashboard":
                 labels=list(kat_data.keys()),
                 values=list(kat_data.values()),
                 hole=0.5,
-                marker_colors=[KATEGORILER.get(k, {}).get("renk", "#888")
+                marker=dict(
+                    colors=[KATEGORILER.get(k, {}).get("renk", "#888")
                                 for k in [next((key for key, v in KATEGORILER.items() if v["label"] == lab), "diger")
                                           for lab in kat_data.keys()]],
-                textfont=dict(family="Inter, sans-serif", size=12),
+                    line=dict(color="white", width=2),
+                ),
+                textfont=dict(family="Inter, sans-serif", size=13, color="white"),
+                textposition="inside",
+                textinfo="percent",
+                insidetextorientation="radial",
                 hovertemplate="<b>%{label}</b><br>₺%{value:,.0f}<br>%{percent}<extra></extra>",
             ))
             fig.update_layout(
-                height=320, margin=dict(t=10, b=10, l=10, r=10),
+                height=340, margin=dict(t=10, b=10, l=10, r=120),
                 paper_bgcolor="white", plot_bgcolor="white",
                 showlegend=True,
-                legend=dict(font=dict(family="Inter, sans-serif", size=11), orientation="v"),
-                font=dict(family="Inter, sans-serif"),
+                legend=dict(
+                    font=dict(family="Inter, sans-serif", size=12, color="#0F172A"),
+                    orientation="v",
+                    yanchor="middle", y=0.5,
+                    xanchor="left", x=1.02,
+                    bgcolor="rgba(255,255,255,0)",
+                    bordercolor="rgba(0,0,0,0)",
+                    itemsizing="constant",
+                ),
+                font=dict(family="Inter, sans-serif", color="#0F172A"),
             )
             st.plotly_chart(fig, use_container_width=True)
 
@@ -992,20 +1307,33 @@ if sayfa == "📊 Dashboard":
             labels=["Ödendi", "Bekliyor"],
             values=[odendi_tutar, bekleyen_tutar],
             hole=0.55,
-            marker_colors=["#22C55E", "#F59E0B"],
-            textfont=dict(family="Inter, sans-serif", size=12),
+            marker=dict(
+                colors=["#22C55E", "#F59E0B"],
+                line=dict(color="white", width=2),
+            ),
+            textfont=dict(family="Inter, sans-serif", size=13, color="white"),
+            textposition="inside",
+            textinfo="percent",
             hovertemplate="<b>%{label}</b><br>₺%{value:,.0f}<br>%{percent}<extra></extra>",
         ))
         fig2.add_annotation(
             text=f"%{ilerleme_pct}", x=0.5, y=0.5,
-            font=dict(size=22, family="JetBrains Mono, monospace", color="#0F172A"),
+            font=dict(size=26, family="JetBrains Mono, monospace", color="#0F172A"),
             showarrow=False,
         )
         fig2.update_layout(
-            height=320, margin=dict(t=10, b=10, l=10, r=10),
+            height=340, margin=dict(t=10, b=10, l=10, r=120),
             paper_bgcolor="white", plot_bgcolor="white",
-            font=dict(family="Inter, sans-serif"),
-            legend=dict(font=dict(family="Inter, sans-serif", size=12)),
+            font=dict(family="Inter, sans-serif", color="#0F172A"),
+            showlegend=True,
+            legend=dict(
+                font=dict(family="Inter, sans-serif", size=12, color="#0F172A"),
+                orientation="v",
+                yanchor="middle", y=0.5,
+                xanchor="left", x=1.02,
+                bgcolor="rgba(255,255,255,0)",
+                bordercolor="rgba(0,0,0,0)",
+            ),
         )
         st.plotly_chart(fig2, use_container_width=True)
 
@@ -1101,7 +1429,7 @@ elif sayfa == "💳 Bu Hafta":
     for o in odemeler:
         vd = vade_durumu(o.get("vade"))
         if o["durum"] == "bekliyor" and vd in ("bugun", "gecmis"):
-            renk = "#FFCCCC" if vd == "gecmis" else "#FFF3E0"
+            renk = "#FEE2E2" if vd == "gecmis" else "#FEF3C7"
             emoji = "🚨" if vd == "gecmis" else "⚠️"
             etiket = "GECİKMİŞ" if vd == "gecmis" else "BUGÜN"
             tl_str = f"₺{fmt(o['tutar_tl'])}" if o.get("tutar_tl") else f"${fmt(o['tutar_usd'])}"
@@ -1389,8 +1717,9 @@ elif sayfa == "💸 Nakit Akış":
     def nakit_rengi(row):
         k = row.get("_kalan", 0)
         if row["Tarih"] == "TOPLAM":
-            return ["background-color:#C8E6C9" if k >= 0 else "background-color:#FFCCCC"] * len(row)
-        return ["background-color:#FEF2F2" if k < 0 else ""] * len(row)
+            return ["background-color:#DCFCE7;color:#14532D;font-weight:700" if k >= 0
+                    else "background-color:#FEE2E2;color:#7F1D1D;font-weight:700"] * len(row)
+        return ["background-color:#FEF2F2;color:#991B1B" if k < 0 else ""] * len(row)
 
     goster = ["Tarih", "Günlük TL (₺)", "Günlük USD ($)", "Kümülatif TL (₺)", "Kümülatif USD ($)", "TL Bakiye Kalan (₺)"]
     styled = df_nakit[goster + ["_kalan"]].style.apply(nakit_rengi, axis=1)
@@ -1405,24 +1734,60 @@ elif sayfa == "💸 Nakit Akış":
             x=df_grafik["Tarih"],
             y=df_grafik["Günlük TL (₺)"].fillna(0),
             name="Günlük TL Ödemesi",
-            marker_color="#2D6BE4",
+            marker_color="#3B82F6",
+            marker_line=dict(color="#2563EB", width=1),
+            hovertemplate="<b>%{x}</b><br>Günlük: ₺%{y:,.0f}<extra></extra>",
         ))
         fig.add_trace(go.Scatter(
             x=df_grafik["Tarih"],
             y=df_grafik["TL Bakiye Kalan (₺)"],
             name="Kalan Bakiye",
             mode="lines+markers",
-            line=dict(color="#059669", width=3),
-            marker=dict(size=8),
+            line=dict(color="#10B981", width=3),
+            marker=dict(size=9, color="#10B981", line=dict(color="white", width=2)),
             yaxis="y2",
+            hovertemplate="<b>%{x}</b><br>Kalan: ₺%{y:,.0f}<extra></extra>",
         ))
         fig.update_layout(
-            title="Günlük Ödeme ve Kalan Bakiye",
-            xaxis_title="Tarih",
-            yaxis_title="Ödeme TL (₺)",
-            yaxis2=dict(title="Kalan Bakiye (₺)", overlaying="y", side="right"),
-            height=380, plot_bgcolor="white", paper_bgcolor="white",
+            title=dict(
+                text="<b>Günlük Ödeme ve Kalan Bakiye</b>",
+                font=dict(family="Inter, sans-serif", size=15, color="#0F172A"),
+                x=0.01, xanchor="left",
+            ),
+            xaxis=dict(
+                title=dict(text="Tarih", font=dict(family="Inter, sans-serif", size=12, color="#475569")),
+                tickfont=dict(family="Inter, sans-serif", size=11, color="#334155"),
+                gridcolor="#F1F5F9",
+                linecolor="#CBD5E1",
+                showline=True,
+            ),
+            yaxis=dict(
+                title=dict(text="Ödeme TL (₺)", font=dict(family="Inter, sans-serif", size=12, color="#2563EB")),
+                tickfont=dict(family="Inter, sans-serif", size=11, color="#334155"),
+                gridcolor="#F1F5F9",
+                linecolor="#CBD5E1",
+                showline=True,
+                zeroline=True,
+                zerolinecolor="#CBD5E1",
+            ),
+            yaxis2=dict(
+                title=dict(text="Kalan Bakiye (₺)", font=dict(family="Inter, sans-serif", size=12, color="#059669")),
+                tickfont=dict(family="Inter, sans-serif", size=11, color="#334155"),
+                overlaying="y",
+                side="right",
+                showgrid=False,
+                linecolor="#CBD5E1",
+                showline=True,
+            ),
+            height=420, plot_bgcolor="white", paper_bgcolor="white",
             hovermode="x unified",
+            font=dict(family="Inter, sans-serif", color="#0F172A"),
+            legend=dict(
+                font=dict(family="Inter, sans-serif", size=12, color="#0F172A"),
+                orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                bgcolor="rgba(255,255,255,0)",
+            ),
+            margin=dict(t=60, b=60, l=70, r=70),
         )
         st.plotly_chart(fig, use_container_width=True)
 
@@ -1496,13 +1861,13 @@ elif sayfa == "📋 Firma Çekleri":
             vd = row.get("_vd", "")
             durum = str(row.get("Son Pozisyon", "")).lower()
             if vd == "gecmis" and "odendi" not in durum:
-                return ["background-color:#FFCCCC"] * len(row)
+                return ["background-color:#FEE2E2;color:#991B1B"] * len(row)
             if vd == "bugun" and "odendi" not in durum:
-                return ["background-color:#FFF3E0"] * len(row)
+                return ["background-color:#FEF3C7;color:#92400E"] * len(row)
             if "odendi" in durum:
-                return ["background-color:#D1FAE5"] * len(row)
+                return ["background-color:#DCFCE7;color:#14532D"] * len(row)
             if "ciro" in durum:
-                return ["background-color:#EFF6FF"] * len(row)
+                return ["background-color:#DBEAFE;color:#1E40AF"] * len(row)
             return [""] * len(row)
 
         goster = [k for k in rows[0].keys() if k != "_vd"]
@@ -1581,48 +1946,177 @@ elif sayfa == "✅ Ödenenler":
 # 7) GEÇMİŞ
 # ════════════════════════════════════════════════════════════════════
 elif sayfa == "🕐 Geçmiş":
-    st.markdown('<div class="baslik">🕐 Geçmiş Haftalar</div>', unsafe_allow_html=True)
-    st.markdown('<div class="alt-baslik">Geçmiş haftaya tıklayarak o haftanın ödemelerini görüntüleyin</div>', unsafe_allow_html=True)
+    st.markdown('<div class="baslik">🕐 Geçmiş & Arşiv</div>', unsafe_allow_html=True)
+    st.markdown('<div class="alt-baslik">Geçmiş hafta ödemeleri ve firma çek arşivi</div>', unsafe_allow_html=True)
 
-    haftalar = get_tum_haftalar()
+    gecmis_tab1, gecmis_tab2 = st.tabs(["📅 Geçmiş Haftalar", "📋 Firma Çekleri Arşivi"])
 
-    if not haftalar:
-        st.info("Henüz geçmiş hafta yok.")
-        st.stop()
+    # ── TAB 1: Geçmiş Haftalar ────────────────────────────────
+    with gecmis_tab1:
+        haftalar = get_tum_haftalar()
 
-    aktif = get_aktif_hafta()
-    aktif_id = aktif["id"] if aktif else None
+        if not haftalar:
+            st.info("Henüz geçmiş hafta yok.")
+        else:
+            aktif = get_aktif_hafta()
+            aktif_id = aktif["id"] if aktif else None
 
-    for h in haftalar:
-        ozet = get_hafta_ozet(h["id"])
-        is_aktif = h["id"] == aktif_id
+            for h in haftalar:
+                ozet = get_hafta_ozet(h["id"])
+                is_aktif = h["id"] == aktif_id
 
-        renk = "#EFF6FF" if is_aktif else "white"
-        border = "2px solid #2563EB" if is_aktif else "1px solid #E5E7EB"
+                renk = "#EFF6FF" if is_aktif else "white"
+                border = "2px solid #2563EB" if is_aktif else "1px solid #E2E8F0"
 
-        col1, col2 = st.columns([5, 1])
-        with col1:
-            aktif_badge = '<span style="background:#2563EB;color:white;font-size:10px;padding:2px 8px;border-radius:4px;margin-left:8px">AKTİF</span>' if is_aktif else ''
-            gecmis_html = (
-                f'<div style="background:{renk};border:{border};border-radius:10px;padding:14px 18px;margin-bottom:8px">'
-                f'<div style="font-size:15px;font-weight:700;color:#0F1117">{h["hafta_adi"]}{aktif_badge}</div>'
-                f'<div style="font-size:12px;color:#6B7280;margin-top:4px">{ozet["toplam"]} ödeme · {ozet["odendi"]}/{ozet["toplam"]} ödendi · Yüklendi: {h["yuklendi_tarih"]}</div>'
-                f'<div style="margin-top:6px"><span class="tag-yesil">₺{fmt(ozet["tl_toplam"])}</span>&nbsp;<span class="tag-mavi">${fmt(ozet["usd_toplam"])}</span></div>'
-                '</div>'
-            )
-            st.markdown(gecmis_html, unsafe_allow_html=True)
+                col1, col2 = st.columns([5, 1])
+                with col1:
+                    aktif_badge = '<span style="background:#2563EB;color:white;font-size:10px;padding:2px 8px;border-radius:4px;margin-left:8px;font-weight:700">AKTİF</span>' if is_aktif else ''
+                    gecmis_html = (
+                        f'<div style="background:{renk};border:{border};border-radius:10px;padding:14px 18px;margin-bottom:8px">'
+                        f'<div style="font-size:15px;font-weight:700;color:#0F172A">{h["hafta_adi"]}{aktif_badge}</div>'
+                        f'<div style="font-size:12px;color:#64748B;margin-top:4px">{ozet["toplam"]} ödeme · {ozet["odendi"]}/{ozet["toplam"]} ödendi · Yüklendi: {h["yuklendi_tarih"]}</div>'
+                        f'<div style="margin-top:6px"><span class="tag-yesil">₺{fmt(ozet["tl_toplam"])}</span>&nbsp;<span class="tag-mavi">${fmt(ozet["usd_toplam"])}</span></div>'
+                        '</div>'
+                    )
+                    st.markdown(gecmis_html, unsafe_allow_html=True)
 
-        with col2:
+                with col2:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if not is_aktif:
+                        if st.button("📂 Aç", key=f"ac_{h['id']}"):
+                            hafta_aktif_yap(h["id"])
+                            st.success(f"'{h['hafta_adi']}' aktif yapıldı.")
+                            st.rerun()
+                    if st.button("🗑 Sil", key=f"sil_{h['id']}"):
+                        hafta_sil(h["id"])
+                        st.success("Silindi.")
+                        st.rerun()
+
+    # ── TAB 2: Firma Çekleri Arşivi ───────────────────────────
+    with gecmis_tab2:
+        st.markdown('<div style="font-size:13px;color:#64748B;margin-bottom:16px;">Firma çeklerinin tamamını burada görüntüleyebilir ve silebilirsiniz.</div>', unsafe_allow_html=True)
+
+        cek_tab1, cek_tab2 = st.tabs(["💴 TL Çekleri", "💵 USD Çekleri"])
+
+        def cek_arsiv_goster(para_birimi):
+            cekler = get_cekler(para_birimi)
+            sym = "$" if para_birimi == "USD" else "₺"
+
+            if not cekler:
+                st.info(f"Kayıtlı {para_birimi} çeki yok.")
+                return
+
+            # Toplu silme butonu
+            col_sil1, col_sil2, col_sil3 = st.columns([2, 2, 2])
+            with col_sil1:
+                st.markdown(
+                    f'<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;'
+                    f'padding:10px 14px;"><span style="font-size:11px;font-weight:600;color:#64748B;'
+                    f'letter-spacing:.5px;text-transform:uppercase;">Toplam</span><br>'
+                    f'<span style="font-size:18px;font-weight:700;color:#0F172A;font-family:monospace;">{len(cekler)} çek</span></div>',
+                    unsafe_allow_html=True
+                )
+            with col_sil2:
+                toplam_meblagh = sum(c.get("meblagh") or 0 for c in cekler)
+                st.markdown(
+                    f'<div style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:10px;'
+                    f'padding:10px 14px;"><span style="font-size:11px;font-weight:600;color:#0369A1;'
+                    f'letter-spacing:.5px;text-transform:uppercase;">Toplam Meblağ</span><br>'
+                    f'<span style="font-size:18px;font-weight:700;color:#075985;font-family:monospace;">{sym}{fmt(toplam_meblagh)}</span></div>',
+                    unsafe_allow_html=True
+                )
+            with col_sil3:
+                st.markdown("<br>", unsafe_allow_html=True)
+                # Onay checkbox'lı toplu silme
+                onay_key = f"toplu_sil_onay_{para_birimi}"
+                if st.session_state.get(onay_key, False):
+                    if st.button(f"⚠️ EVET, TÜM {para_birimi} ÇEKLERİNİ SİL", key=f"toplu_sil_exec_{para_birimi}", type="primary", use_container_width=True):
+                        cek_sil_hepsi(para_birimi)
+                        st.session_state[onay_key] = False
+                        st.success(f"Tüm {para_birimi} çekleri silindi.")
+                        st.rerun()
+                    if st.button("Vazgeç", key=f"toplu_sil_iptal_{para_birimi}", use_container_width=True):
+                        st.session_state[onay_key] = False
+                        st.rerun()
+                else:
+                    if st.button(f"🗑 Tüm {para_birimi} Çeklerini Sil", key=f"toplu_sil_btn_{para_birimi}", use_container_width=True):
+                        st.session_state[onay_key] = True
+                        st.rerun()
+
             st.markdown("<br>", unsafe_allow_html=True)
-            if not is_aktif:
-                if st.button("📂 Aç", key=f"ac_{h['id']}"):
-                    hafta_aktif_yap(h["id"])
-                    st.success(f"'{h['hafta_adi']}' aktif yapıldı.")
-                    st.rerun()
-            if st.button("🗑 Sil", key=f"sil_{h['id']}"):
-                hafta_sil(h["id"])
-                st.success("Silindi.")
-                st.rerun()
+
+            # Arama
+            arama = st.text_input("🔍 Ara (firma, çek no, ref no)", key=f"cek_ara_{para_birimi}", placeholder="Aramak istediğiniz kelimeyi yazın...")
+
+            # Filtrele
+            filtre_cekler = cekler
+            if arama:
+                a = arama.lower()
+                filtre_cekler = [c for c in cekler if
+                                 a in str(c.get("ch_ismi", "")).lower() or
+                                 a in str(c.get("cek_no", "")).lower() or
+                                 a in str(c.get("ref_no", "")).lower() or
+                                 a in str(c.get("banka", "")).lower()]
+                st.caption(f"{len(filtre_cekler)} / {len(cekler)} çek gösteriliyor")
+
+            # Çek listesi (her biri silinebilir)
+            for c in filtre_cekler:
+                durum_str = str(c.get("durum", "")).lower()
+                vd = vade_durumu(c.get("vade"))
+
+                if "odendi" in durum_str:
+                    kart_bg = "#DCFCE7"; kart_border = "#86EFAC"; durum_renk = "#166534"
+                elif "ciro" in durum_str:
+                    kart_bg = "#DBEAFE"; kart_border = "#93C5FD"; durum_renk = "#1E40AF"
+                elif vd == "gecmis":
+                    kart_bg = "#FEE2E2"; kart_border = "#FCA5A5"; durum_renk = "#991B1B"
+                elif vd == "bugun":
+                    kart_bg = "#FEF3C7"; kart_border = "#FCD34D"; durum_renk = "#92400E"
+                else:
+                    kart_bg = "#F8FAFC"; kart_border = "#E2E8F0"; durum_renk = "#334155"
+
+                col_a, col_b = st.columns([9, 1])
+                with col_a:
+                    st.markdown(f"""
+                    <div style="background:{kart_bg};border:1px solid {kart_border};border-radius:10px;padding:12px 16px;margin-bottom:6px">
+                        <div style="display:grid;grid-template-columns:1.5fr 1.5fr 1fr 1.5fr 1fr;gap:12px;align-items:center">
+                            <div>
+                                <div style="font-size:12px;color:#64748B;font-weight:600">ÇEK NO</div>
+                                <div style="font-size:13px;font-weight:700;color:#0F172A;font-family:monospace">{c.get('cek_no') or '-'}</div>
+                                <div style="font-size:11px;color:#64748B;margin-top:2px">Ref: {c.get('ref_no') or '-'}</div>
+                            </div>
+                            <div>
+                                <div style="font-size:12px;color:#64748B;font-weight:600">CARİ/FİRMA</div>
+                                <div style="font-size:13px;font-weight:600;color:#0F172A">{c.get('ch_ismi') or '-'}</div>
+                                <div style="font-size:11px;color:#64748B;margin-top:2px">{c.get('ch_kodu') or ''}</div>
+                            </div>
+                            <div>
+                                <div style="font-size:12px;color:#64748B;font-weight:600">VADE</div>
+                                <div style="font-size:13px;font-weight:600;color:#0F172A">{fmt_tarih(c.get('vade')) or '-'}</div>
+                            </div>
+                            <div>
+                                <div style="font-size:12px;color:#64748B;font-weight:600">MEBLAĞ / KALAN</div>
+                                <div style="font-size:14px;font-weight:700;color:#0F172A;font-family:monospace">{sym}{fmt(c.get('meblagh') or 0)}</div>
+                                <div style="font-size:11px;color:#64748B;margin-top:2px">Kalan: {sym}{fmt(c.get('kalan') or 0)}</div>
+                            </div>
+                            <div>
+                                <div style="font-size:12px;color:#64748B;font-weight:600">DURUM</div>
+                                <div style="font-size:12px;font-weight:700;color:{durum_renk};text-transform:uppercase;letter-spacing:.3px">{c.get('durum') or 'Bekliyor'}</div>
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col_b:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("🗑", key=f"cek_sil_{c.get('id')}", help="Bu çeki sil"):
+                        cek_sil(c.get("id"))
+                        st.success("Silindi.")
+                        st.rerun()
+
+        with cek_tab1:
+            cek_arsiv_goster("TL")
+        with cek_tab2:
+            cek_arsiv_goster("USD")
 
 
 # ════════════════════════════════════════════════════════════════════
