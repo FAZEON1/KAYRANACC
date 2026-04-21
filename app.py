@@ -1,3 +1,16 @@
+import sys as _sys
+_sys.stderr.write("\n=====KAYRANACC_DEBUG_START=====\n"); _sys.stderr.flush()
+_tpl = "try:\n    __import__('{m}')\n    import sys; sys.stderr.write('[OK] {m}\\n'); sys.stderr.flush()\nexcept Exception as e:\n    import sys, traceback; sys.stderr.write('[FAIL] {m}: ' + type(e).__name__ + ': ' + str(e) + '\\n' + traceback.format_exc()); sys.stderr.flush()\n"
+exec(_tpl.format(m="pandas"))
+exec(_tpl.format(m="plotly.graph_objects"))
+exec(_tpl.format(m="plotly.express"))
+exec(_tpl.format(m="requests"))
+exec(_tpl.format(m="database"))
+exec(_tpl.format(m="excel_islemler"))
+exec(_tpl.format(m="rapor"))
+exec(_tpl.format(m="bildirim"))
+_sys.stderr.write("=====KAYRANACC_DEBUG_END=====\n"); _sys.stderr.flush()
+
 import streamlit as st
 import traceback as _tb
 
