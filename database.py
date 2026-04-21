@@ -4,6 +4,7 @@ import streamlit as st
 from supabase import create_client, Client
 from datetime import date
 
+
 # ── Supabase bağlantısı — cache ile tek seferlik oluştur ─────────────
 @st.cache_resource
 def get_client() -> Client:
@@ -19,7 +20,6 @@ def initialize_db():
 # ════════════════════════════════════════════════════════════════════
 # HAFTALAR
 # ════════════════════════════════════════════════════════════════════
-
 def get_tum_haftalar():
     sb = get_client()
     res = sb.table("haftalar").select("*").order("id", desc=True).execute()
@@ -58,7 +58,6 @@ def hafta_sil(hafta_id):
 # ════════════════════════════════════════════════════════════════════
 # ODEMELER
 # ════════════════════════════════════════════════════════════════════
-
 def get_hafta_odemeler(hafta_id):
     sb = get_client()
     res = sb.table("odemeler").select("*").eq("hafta_id", hafta_id).order("vade").execute()
@@ -119,7 +118,6 @@ def _vade(v):
     try:
         import pandas as pd
         d = pd.to_datetime(s)
-        # pandas.Timestamp -> native string
         return d.strftime("%Y-%m-%d")
     except Exception:
         return None
@@ -129,21 +127,21 @@ def odeme_ekle_bulk(hafta_id, odemeler):
     sb = get_client()
     rows = []
     for o in odemeler:
-        tl  = _temizle(o.get("tl"))
+        tl = _temizle(o.get("tl"))
         usd = _temizle(o.get("usd"))
         if tl is None and usd is None:
             continue
         rows.append({
-            "hafta_id":   int(hafta_id),
-            "firma":      _str(o.get("firma")),
-            "aciklama":   _str(o.get("aciklama")),
+            "hafta_id": int(hafta_id),
+            "firma": _str(o.get("firma")),
+            "aciklama": _str(o.get("aciklama")),
             "cari_banka": _str(o.get("cari_banka")),
-            "vade":       _vade(o.get("vade")),
-            "tutar_tl":   tl,
-            "tutar_usd":  usd,
-            "kategori":   _str(o.get("kategori")) or "diger",
-            "manuel":     int(o.get("manuel") or 0),
-            "durum":      "bekliyor",
+            "vade": _vade(o.get("vade")),
+            "tutar_tl": tl,
+            "tutar_usd": usd,
+            "kategori": _str(o.get("kategori")) or "diger",
+            "manuel": int(o.get("manuel") or 0),
+            "durum": "bekliyor",
         })
     BATCH = 25
     for i in range(0, len(rows), BATCH):
@@ -183,7 +181,6 @@ def odeme_sil(odeme_id):
 # ════════════════════════════════════════════════════════════════════
 # BANKALAR
 # ════════════════════════════════════════════════════════════════════
-
 def get_bankalar():
     sb = get_client()
     res = sb.table("bankalar").select("*").order("id").execute()
@@ -212,31 +209,69 @@ def banka_sil(banka_id):
 # ════════════════════════════════════════════════════════════════════
 # CEKLER
 # ════════════════════════════════════════════════════════════════════
-
 def get_cekler(para_birimi="TL"):
     sb = get_client()
     res = sb.table("cekler").select("*").eq("para_birimi", para_birimi).order("vade").execute()
     return res.data or []
 
 
-def cek_ekle_bulk(cekler, para_birimi="TL"):
+def cek_sil_hepsi(para_birimi=None):
+    """
+    Çekleri siler.
+    - para_birimi="TL" → Sadece TL çekleri siler
+    - para_birimi="USD" → Sadece USD çekleri siler
+    - para_birimi=None → TÜM çekleri siler
+    """
     sb = get_client()
+    if para_birimi:
+        sb.table("cekler").delete().eq("para_birimi", para_birimi).execute()
+    else:
+        sb.table("cekler").delete().neq("id", 0).execute()
+
+
+def cek_sil(cek_id):
+    """Tek bir çeki siler."""
+    sb = get_client()
+    sb.table("cekler").delete().eq("id", cek_id).execute()
+
+
+def cek_ekle_bulk(cekler, para_birimi="TL", temizle_onceki=True):
+    """
+    Çekleri toplu ekler.
+
+    ÖNEMLİ: Varsayılan olarak (temizle_onceki=True), yüklemeden önce aynı
+    para birimindeki TÜM eski çekleri siler. Bu sayede aynı Excel'i
+    defalarca yüklesen bile duplicate oluşmaz.
+
+    Eğer mevcut çeklerin üzerine eklemek istersen: temizle_onceki=False geç.
+    """
+    sb = get_client()
+
+    # Ekleyeceğimiz çekler boşsa hiçbir şey yapma (yanlışlıkla tüm kayıtları silmeyelim)
+    if not cekler:
+        return
+
+    # 1) Önce bu para birimindeki eski kayıtları temizle
+    if temizle_onceki:
+        sb.table("cekler").delete().eq("para_birimi", para_birimi).execute()
+
+    # 2) Sonra yeni kayıtları ekle
     rows = []
     for c in cekler:
         rows.append({
-            "ref_no":      _str(c.get("ref_no")),
-            "cek_no":      _str(c.get("cek_no")),
-            "tarih":       _vade(c.get("tarih")),
-            "vade":        _vade(c.get("vade")),
-            "meblagh":     _temizle(c.get("meblagh")) or 0,
-            "odenen":      _temizle(c.get("odenen")) or 0,
-            "kalan":       _temizle(c.get("kalan")) or 0,
-            "durum":       _str(c.get("durum")) or "Bekliyor",
-            "ch_kodu":     _str(c.get("ch_kodu")),
-            "ch_ismi":     _str(c.get("ch_ismi")),
-            "banka":       _str(c.get("banka")),
-            "sube":        _str(c.get("sube")),
-            "hesap_no":    _str(c.get("hesap_no")),
+            "ref_no": _str(c.get("ref_no")),
+            "cek_no": _str(c.get("cek_no")),
+            "tarih": _vade(c.get("tarih")),
+            "vade": _vade(c.get("vade")),
+            "meblagh": _temizle(c.get("meblagh")) or 0,
+            "odenen": _temizle(c.get("odenen")) or 0,
+            "kalan": _temizle(c.get("kalan")) or 0,
+            "durum": _str(c.get("durum")) or "Bekliyor",
+            "ch_kodu": _str(c.get("ch_kodu")),
+            "ch_ismi": _str(c.get("ch_ismi")),
+            "banka": _str(c.get("banka")),
+            "sube": _str(c.get("sube")),
+            "hesap_no": _str(c.get("hesap_no")),
             "para_birimi": _str(c.get("para_birimi")) or para_birimi,
         })
     BATCH = 25
