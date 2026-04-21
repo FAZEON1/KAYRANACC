@@ -1,0 +1,32 @@
+[server]
+# Kod değişikliğinde otomatik yeniden yükle
+runOnSave = true
+
+# File watcher tipi — "auto" Linux/Mac için poll kullanır, Windows için watchdog
+fileWatcherType = "auto"
+
+# Header'da bazı butonların görünürlüğü (UX iyileştirme)
+headless = false
+
+[browser]
+# Yeni kullanıcılara doğru URL bilgisi gönder
+gatherUsageStats = false
+
+[theme]
+# Light mode — koyu moddan kaynaklı kontrast sorunlarını engeller
+base = "light"
+primaryColor = "#2563EB"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F1F5F9"
+textColor = "#0F172A"
+font = "sans serif"
+
+[runner]
+# Her çalıştırmada değişiklikleri kontrol et
+magicEnabled = true
+fastReruns = true
+
+[client]
+# Hataları konsola göster (cache sorunu varsa görünür)
+showErrorDetails = true
+toolbarMode = "auto"
