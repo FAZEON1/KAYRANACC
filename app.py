@@ -1,28 +1,36 @@
 import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
-import plotly.express as px
-import requests
-import os
-from datetime import datetime, date, timedelta
-from io import BytesIO
+import traceback as _tb
 
-from database import (
-    initialize_db, get_tum_haftalar, get_aktif_hafta,
-    hafta_ekle, hafta_aktif_yap, hafta_sil,
-    get_hafta_odemeler, odeme_ekle_bulk, odeme_ekle_manuel,
-    odeme_durum_guncelle, odeme_sil, get_hafta_ozet,
-    get_bankalar, banka_ekle, banka_guncelle, banka_sil,
-    get_cekler, cek_ekle_bulk,
-)
-from excel_islemler import (
-    excel_yukle_odeme_listesi, excel_yukle_cek_listesi,
-    export_excel, create_sample_excel
-)
-from rapor import haftalik_excel_raporu, haftalik_html_raporu, nakit_akis_excel
-from bildirim import (
-    get_bildirim_ayarlari, email_gonder, baglanti_test,
-    vade_bildirimi_olustur, ozet_bildirimi_olustur,
+try:
+    import pandas as pd
+    import plotly.graph_objects as go
+    import plotly.express as px
+    import requests
+    import os
+    from datetime import datetime, date, timedelta
+    from io import BytesIO
+    from database import (
+        initialize_db, get_tum_haftalar, get_aktif_hafta,
+        hafta_ekle, hafta_aktif_yap, hafta_sil,
+        get_hafta_odemeler, odeme_ekle_bulk, odeme_ekle_manuel,
+        odeme_durum_guncelle, odeme_sil, get_hafta_ozet,
+        get_bankalar, banka_ekle, banka_guncelle, banka_sil,
+        get_cekler, cek_ekle_bulk,
+    )
+    from excel_islemler import (
+        excel_yukle_odeme_listesi, excel_yukle_cek_listesi,
+        export_excel, create_sample_excel
+    )
+    from rapor import haftalik_excel_raporu, haftalik_html_raporu, nakit_akis_excel
+    from bildirim import (
+        get_bildirim_ayarlari, email_gonder, baglanti_test,
+        vade_bildirimi_olustur, ozet_bildirimi_olustur,
+    )
+except Exception as _e:
+    st.set_page_config(page_title="DEBUG", layout="wide")
+    st.error(f"IMPORT HATASI: {type(_e).__name__}: {_e}")
+    st.code(_tb.format_exc())
+    st.stop()
 )
 
 # ── Sayfa ayarları ──────────────────────────────────────────────────
