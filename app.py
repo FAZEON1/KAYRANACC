@@ -34,14 +34,31 @@ st.set_page_config(
 )
 
 initialize_db()
+st.write("DEBUG: App başladı!"); st.stop()
+
+# ── VERSION HASH (cache busting) ─────────────────────────────────────
+# Kodun hash'i deploy ile değiştiği için browser'ın eski CSS/JS cache'ini
+# otomatik olarak patlatır. GitHub'a her push sonrası yeni hash → yeni asset.
+import hashlib
+def _get_app_version():
+    try:
+        # Çalışan dosyanın içeriğini hash'le
+        with open(__file__, 'rb') as f:
+            return hashlib.md5(f.read()).hexdigest()[:8]
+    except Exception:
+        # Son çare: deploy zamanı
+        return datetime.now().strftime("%Y%m%d%H%M")
+
+APP_VERSION = _get_app_version()
 
 # ── Cache kontrol meta etiketleri ────────────────────────────────────
-APP_VERSION = datetime.now().strftime("%Y%m%d%H%M")
+# Tarayıcının agresif cache'lemesini engeller
 st.markdown(f"""
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
-<!-- app-version: {APP_VERSION} -->
+<meta name="app-version" content="{APP_VERSION}" />
+<!-- v{APP_VERSION} -->
 """, unsafe_allow_html=True)
 
 # ── CSS ──────────────────────────────────────────────────────────────
@@ -102,13 +119,29 @@ section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover {
     color: #F1F5F9 !important;
 }
 section[data-testid="stSidebar"] .stNumberInput input {
-    background: rgba(255,255,255,0.08) !important;
-    border: 1px solid rgba(255,255,255,0.12) !important;
+    background: rgba(15,22,41,0.6) !important;
+    border: 1px solid rgba(148,163,184,0.25) !important;
     color: #F1F5F9 !important;
     border-radius: 8px !important;
     font-family: 'JetBrains Mono', monospace !important;
     font-size: 15px !important;
     font-weight: 600 !important;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.2) !important;
+}
+section[data-testid="stSidebar"] .stNumberInput input:focus {
+    background: rgba(15,22,41,0.8) !important;
+    border-color: rgba(96,165,250,0.5) !important;
+    box-shadow: 0 0 0 2px rgba(59,130,246,0.2) !important;
+}
+/* Number input +/- butonları */
+section[data-testid="stSidebar"] .stNumberInput button {
+    background: rgba(15,22,41,0.5) !important;
+    border-color: rgba(148,163,184,0.2) !important;
+    color: #94A3B8 !important;
+}
+section[data-testid="stSidebar"] .stNumberInput button:hover {
+    background: rgba(59,130,246,0.2) !important;
+    color: #BFDBFE !important;
 }
 section[data-testid="stSidebar"] .stButton button {
     background: rgba(59, 130, 246, 0.15) !important;
@@ -713,37 +746,37 @@ def giris_ekrani():
   <div style="display:inline-flex;align-items:center;gap:12px;margin-bottom:36px;">
     <div style="width:52px;height:52px;background:linear-gradient(135deg,#3B82F6,#6366F1);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;box-shadow:0 8px 24px rgba(59,130,246,0.35);">💳</div>
     <div>
-      <div style="font-size:22px;font-weight:800;color:#F8FAFC;letter-spacing:-.5px;">KAYRANACC</div>
-      <div style="font-size:11px;color:#94A3B8;font-weight:500;letter-spacing:1px;text-transform:uppercase;">Finance Suite</div>
+      <div style="font-size:22px;font-weight:800;color:#FFFFFF;letter-spacing:-.5px;">KAYRANACC</div>
+      <div style="font-size:11px;color:#E2E8F0;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Finance Suite</div>
     </div>
   </div>
-  <h1 style="font-size:42px;font-weight:800;color:#F8FAFC;line-height:1.15;letter-spacing:-1.5px;margin:0 0 20px 0;">
+  <h1 style="font-size:42px;font-weight:800;color:#FFFFFF;line-height:1.15;letter-spacing:-1.5px;margin:0 0 20px 0;">
     Ödemelerinizi<br>
-    <span style="background:linear-gradient(135deg,#60A5FA,#818CF8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">profesyonelce</span> yönetin
+    <span style="background:linear-gradient(135deg,#93C5FD,#A5B4FC);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">profesyonelce</span> yönetin
   </h1>
-  <p style="font-size:15px;color:#CBD5E1;line-height:1.6;max-width:460px;margin-bottom:36px;">
+  <p style="font-size:15px;color:#E2E8F0;line-height:1.6;max-width:460px;margin-bottom:36px;font-weight:400;">
     Haftalık ödeme takibi, nakit akış analizi, banka bakiye yönetimi ve firma çek yönetimi — tek bir platformda.
   </p>
   <div style="display:flex;flex-direction:column;gap:14px;max-width:420px;">
     <div style="display:flex;align-items:flex-start;gap:12px;">
-      <div style="width:28px;height:28px;background:rgba(59,130,246,0.2);border:1px solid rgba(59,130,246,0.4);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">📊</div>
+      <div style="width:28px;height:28px;background:rgba(59,130,246,0.25);border:1px solid rgba(59,130,246,0.5);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">📊</div>
       <div>
-        <div style="color:#F1F5F9;font-size:13px;font-weight:600;">Anlık Dashboard</div>
-        <div style="color:#94A3B8;font-size:12px;margin-top:2px;">Haftalık özet, alarmlar ve ilerleme takibi</div>
+        <div style="color:#FFFFFF;font-size:13px;font-weight:700;">Anlık Dashboard</div>
+        <div style="color:#CBD5E1;font-size:12px;margin-top:2px;font-weight:400;">Haftalık özet, alarmlar ve ilerleme takibi</div>
       </div>
     </div>
     <div style="display:flex;align-items:flex-start;gap:12px;">
-      <div style="width:28px;height:28px;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.4);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">💸</div>
+      <div style="width:28px;height:28px;background:rgba(16,185,129,0.25);border:1px solid rgba(16,185,129,0.5);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">💸</div>
       <div>
-        <div style="color:#F1F5F9;font-size:13px;font-weight:600;">Nakit Akış Analizi</div>
-        <div style="color:#94A3B8;font-size:12px;margin-top:2px;">Günlük kümülatif projeksiyon ve grafikler</div>
+        <div style="color:#FFFFFF;font-size:13px;font-weight:700;">Nakit Akış Analizi</div>
+        <div style="color:#CBD5E1;font-size:12px;margin-top:2px;font-weight:400;">Günlük kümülatif projeksiyon ve grafikler</div>
       </div>
     </div>
     <div style="display:flex;align-items:flex-start;gap:12px;">
-      <div style="width:28px;height:28px;background:rgba(139,92,246,0.2);border:1px solid rgba(139,92,246,0.4);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">🔒</div>
+      <div style="width:28px;height:28px;background:rgba(139,92,246,0.25);border:1px solid rgba(139,92,246,0.5);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">🔒</div>
       <div>
-        <div style="color:#F1F5F9;font-size:13px;font-weight:600;">Güvenli Erişim</div>
-        <div style="color:#94A3B8;font-size:12px;margin-top:2px;">Bulut senkronizasyonlu, şifre korumalı</div>
+        <div style="color:#FFFFFF;font-size:13px;font-weight:700;">Güvenli Erişim</div>
+        <div style="color:#CBD5E1;font-size:12px;margin-top:2px;font-weight:400;">Bulut senkronizasyonlu, şifre korumalı</div>
       </div>
     </div>
   </div>
@@ -1000,7 +1033,17 @@ with st.sidebar:
     st.markdown("---")
 
     # Kur paneli
-    st.markdown("**💱 USD/TL Kur**")
+    st.markdown("""
+    <div style="
+        background: rgba(245,158,11,0.10);
+        border: 1px solid rgba(245,158,11,0.25);
+        border-radius: 10px;
+        padding: 8px 14px;
+        margin-bottom: 8px;
+    ">
+        <div style="font-size:10px;color:#FBBF24;font-weight:700;letter-spacing:.5px;text-transform:uppercase;">💱 USD/TL Kur</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     if "kur" not in st.session_state:
         st.session_state.kur = 38.50
@@ -1030,7 +1073,17 @@ with st.sidebar:
     st.markdown("---")
 
     # ── Uygulamayı Yenile (Browser cache'i temizle + veri yenile) ──
-    st.markdown("**⚙️ Sistem**")
+    st.markdown("""
+    <div style="
+        background: rgba(148,163,184,0.10);
+        border: 1px solid rgba(148,163,184,0.20);
+        border-radius: 10px;
+        padding: 8px 14px;
+        margin-bottom: 8px;
+    ">
+        <div style="font-size:10px;color:#CBD5E1;font-weight:700;letter-spacing:.5px;text-transform:uppercase;">⚙️ Sistem</div>
+    </div>
+    """, unsafe_allow_html=True)
     if st.button("🔄 Uygulamayı Yenile", use_container_width=True, help="Verileri ve arayüzü tazele"):
         # Session state'i temizle (kullanıcı bilgisi hariç)
         korunacak = {"giris_yapildi", "aktif_kullanici"}
