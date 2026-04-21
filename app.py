@@ -34,29 +34,14 @@ st.set_page_config(
 )
 
 initialize_db()
-# ── VERSION HASH (cache busting) ─────────────────────────────────────
-# Kodun hash'i deploy ile değiştiği için browser'ın eski CSS/JS cache'ini
-# otomatik olarak patlatır. GitHub'a her push sonrası yeni hash → yeni asset.
-import hashlib
-def _get_app_version():
-    try:
-        # Çalışan dosyanın içeriğini hash'le
-        with open(__file__, 'rb') as f:
-            return hashlib.md5(f.read()).hexdigest()[:8]
-    except Exception:
-        # Son çare: deploy zamanı
-        return datetime.now().strftime("%Y%m%d%H%M")
-
-APP_VERSION = _get_app_version()
 
 # ── Cache kontrol meta etiketleri ────────────────────────────────────
-# Tarayıcının agresif cache'lemesini engeller
+APP_VERSION = datetime.now().strftime("%Y%m%d%H%M")
 st.markdown(f"""
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
-<meta name="app-version" content="{APP_VERSION}" />
-<!-- v{APP_VERSION} -->
+<!-- app-version: {APP_VERSION} -->
 """, unsafe_allow_html=True)
 
 # ── CSS ──────────────────────────────────────────────────────────────
