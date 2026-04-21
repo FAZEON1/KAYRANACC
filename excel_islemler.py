@@ -20,8 +20,17 @@ def excel_serial_to_date(n):
 def parse_date(v):
     if v is None or v == "":
         return None
+    # datetime/Timestamp objelerini direkt çevir
+    try:
+        if hasattr(v, 'strftime'):
+            return v.strftime("%Y-%m-%d")
+    except Exception:
+        pass
     if isinstance(v, (int, float)):
-        return excel_serial_to_date(v)
+        # Excel seri numarası olabilir (ama sadece makul aralıkta)
+        if 10000 < float(v) < 80000:
+            return excel_serial_to_date(v)
+        return None
     try:
         s = str(v).strip()[:10]
         pd.to_datetime(s)
@@ -31,24 +40,69 @@ def parse_date(v):
 
 
 def parse_num(v):
+    """
+    Sayı parse eder. Şu formatları destekler:
+      - Gerçek int/float: 29298806.68
+      - İngilizce format string: "29298806.68", "1,234.56"
+      - Türkçe format string: "29.298.806,68", "1.234,56"
+      - Para sembollü: "₺29.298.806,68", "$1,234.56"
+    """
     import math
+
     if v is None or v == "":
         return None
+
     # numpy tipi ise native'e çevir
     if hasattr(v, 'item'):
-        v = v.item()
-    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
-        return None
+        try:
+            v = v.item()
+        except Exception:
+            pass
+
+    # Zaten sayıysa direkt dön (Excel dtype=str değilse buraya düşer)
     if isinstance(v, (int, float)):
-        return float(v)
-    try:
-        s = str(v).strip().replace(" ", "").replace(".", "").replace(",", ".")
-        if s in ("", "nan", "none", "-", "nat"):
+        if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
             return None
+        return float(v)
+
+    try:
+        s = str(v).strip().replace(" ", "").replace("\xa0", "")
+        if s.lower() in ("", "nan", "none", "-", "nat", "null"):
+            return None
+
+        # Para birimi sembollerini temizle
+        for sym in ("₺", "$", "€", "£", "TL", "USD", "EUR", "try", "usd", "eur"):
+            s = s.replace(sym, "")
+        s = s.strip()
+        if not s:
+            return None
+
+        has_comma = "," in s
+        has_dot = "." in s
+
+        if has_comma and has_dot:
+            # Her iki ayraç var: son gelen ondalık ayraçtır
+            if s.rfind(",") > s.rfind("."):
+                # Türkçe: 1.234.567,89
+                s = s.replace(".", "").replace(",", ".")
+            else:
+                # İngilizce: 1,234,567.89
+                s = s.replace(",", "")
+        elif has_comma:
+            # Sadece virgül: Türkçe ondalık kabul et → "1234,56" → "1234.56"
+            # (Binlik ayraç olarak kullanılmışsa zaten birden fazla virgül/nokta olurdu)
+            s = s.replace(",", ".")
+        elif has_dot:
+            # Sadece nokta: birden fazla nokta varsa Türkçe binlik ayraç → sil
+            # Tek nokta varsa ondalık ayraçtır, olduğu gibi bırak
+            if s.count(".") > 1:
+                s = s.replace(".", "")
+            # Tek nokta varsa (örn. "29298806.68") float() zaten doğru okuyor
+
         result = float(s)
         if math.isnan(result) or math.isinf(result):
             return None
-        return float(result)  # kesinlikle native float
+        return float(result)
     except Exception:
         return None
 
@@ -82,28 +136,60 @@ def excel_yukle_odeme_listesi(file_bytes):
     """
     Haftalık ödeme listesi Excel'i okur.
     Sütun sırası: A=HAFTA, B=FİRMA, C=AÇIKLAMA, D=CARİ BANKA/IBAN, E=VADE, F=TUTAR TL, G=TUTAR USD, H=KATEGORİ
+
+    ÖNEMLİ: dtype=str KULLANMAYIZ — değerlerin orijinal tipi (float, datetime) korunur.
+    Bu sayede parse_num ondalık noktasını yanlış yorumlamaz.
     """
     try:
-        df = pd.read_excel(BytesIO(file_bytes), header=None, dtype=str)
+        # dtype=str YOK → sayılar float, tarihler datetime olarak gelir
+        df = pd.read_excel(BytesIO(file_bytes), header=None)
         rows = df.values.tolist()
 
-        hafta = str(rows[0][0]).strip() if rows and rows[0][0] else ""
+        hafta = ""
+        if rows and rows[0] and rows[0][0] is not None:
+            hv = rows[0][0]
+            try:
+                if hasattr(hv, 'strftime'):
+                    hafta = hv.strftime("%d.%m.%Y")
+                else:
+                    hafta = str(hv).strip()
+            except Exception:
+                hafta = str(hv).strip()
+
         odemeler = []
         hatalar = []
 
         for i, r in enumerate(rows[2:], start=3):
-            if not r or r[1] is None or str(r[1]).strip() in ("", "nan", "-"):
+            if not r or r[1] is None:
                 continue
-            firma = str(r[1]).strip()
-            if not firma:
+            firma_raw = r[1]
+            # NaN / boş kontrolü
+            try:
+                if pd.isna(firma_raw):
+                    continue
+            except Exception:
+                pass
+            firma = str(firma_raw).strip()
+            if not firma or firma.lower() in ("nan", "-", "none"):
                 continue
 
-            aciklama = str(r[2]).strip() if r[2] and str(r[2]) != "nan" else ""
-            cari_banka = str(r[3]).strip() if len(r) > 3 and r[3] and str(r[3]) != "nan" else ""
+            def safe_str(x):
+                if x is None:
+                    return ""
+                try:
+                    if pd.isna(x):
+                        return ""
+                except Exception:
+                    pass
+                return str(x).strip()
+
+            aciklama = safe_str(r[2]) if len(r) > 2 else ""
+            cari_banka = safe_str(r[3]) if len(r) > 3 else ""
             vade = parse_date(r[4]) if len(r) > 4 else None
             tl = parse_num(r[5]) if len(r) > 5 else None
             usd = parse_num(r[6]) if len(r) > 6 else None
-            kategori = normalize_kategori(r[7]) if len(r) > 7 and r[7] and str(r[7]) != "nan" else "diger"
+            kategori_raw = r[7] if len(r) > 7 else None
+            kategori = normalize_kategori(safe_str(kategori_raw)) if kategori_raw else "diger"
 
             if not tl and not usd:
                 continue
@@ -123,7 +209,6 @@ def excel_yukle_odeme_listesi(file_bytes):
             })
 
         return hafta, odemeler, hatalar
-
     except Exception as e:
         return "", [], [f"Excel okuma hatası: {str(e)}"]
 
@@ -131,79 +216,99 @@ def excel_yukle_odeme_listesi(file_bytes):
 def excel_yukle_cek_listesi(file_bytes):
     """
     Sutun sirasi: A=Sira No, B=Referans No, C=Tarih, D=Vade Tarihi,
-    E=Cek No, F=Meblagh, G=Odenen, H=Kalan, I=Para Birimi,
-    J=Son Pozisyon, K=C/H Kodu, L=C/H Ismi, M=Banka, N=Sube, O=Hesap No
+                  E=Cek No, F=Meblagh, G=Odenen, H=Kalan, I=Para Birimi,
+                  J=Son Pozisyon, K=C/H Kodu, L=C/H Ismi, M=Banka, N=Sube, O=Hesap No
     """
     try:
-        df = pd.read_excel(BytesIO(file_bytes), header=None, dtype=str)
+        # Burada da dtype=str kullanmıyoruz
+        df = pd.read_excel(BytesIO(file_bytes), header=None)
         rows = df.values.tolist()
 
         tl_cekler = []
         usd_cekler = []
 
         for i, r in enumerate(rows):
-            if not r or all((str(v) in ("", "nan", "None") for v in r)):
+            if not r:
                 continue
+            # Tamamı boş satırı atla
+            try:
+                if all((v is None or (isinstance(v, float) and pd.isna(v))) for v in r):
+                    continue
+            except Exception:
+                pass
 
             try:
-                sira = float(str(r[0]).strip())
+                sira_raw = r[0]
+                if sira_raw is None or (isinstance(sira_raw, float) and pd.isna(sira_raw)):
+                    continue
+                sira = float(str(sira_raw).strip())
                 if sira <= 0:
                     continue
             except Exception:
                 continue
 
             def cell(idx, default=""):
-                if len(r) > idx and r[idx] and str(r[idx]) not in ("nan", "None"):
-                    return str(r[idx]).strip()
+                if len(r) > idx and r[idx] is not None:
+                    try:
+                        if pd.isna(r[idx]):
+                            return default
+                    except Exception:
+                        pass
+                    v = r[idx]
+                    if hasattr(v, 'strftime'):
+                        return v.strftime("%Y-%m-%d")
+                    s = str(v).strip()
+                    if s.lower() in ("nan", "none"):
+                        return default
+                    return s
                 return default
 
             ref_no = cell(1)
             if not ref_no:
                 continue
-
-            tarih       = parse_date(cell(2)) or ""
-            vade        = parse_date(cell(3)) or ""
-            cek_no      = cell(4)
-            meblagh     = parse_num(cell(5)) or 0
-            odenen      = parse_num(cell(6)) or 0
-            kalan       = parse_num(cell(7)) or meblagh
+            tarih = parse_date(r[2] if len(r) > 2 else None) or ""
+            vade = parse_date(r[3] if len(r) > 3 else None) or ""
+            cek_no = cell(4)
+            meblagh = parse_num(r[5] if len(r) > 5 else None) or 0
+            odenen = parse_num(r[6] if len(r) > 6 else None) or 0
+            kalan = parse_num(r[7] if len(r) > 7 else None) or meblagh
             para_birimi = cell(8, "TL").upper().strip()
-            pozisyon    = cell(9, "Bekliyor")
-            ch_kodu     = cell(10)
-            ch_ismi     = cell(11)
-            banka       = cell(12)
-            sube        = cell(13)
-            hesap_no    = cell(14)
+            pozisyon = cell(9, "Bekliyor")
+            ch_kodu = cell(10)
+            ch_ismi = cell(11)
+            banka = cell(12)
+            sube = cell(13)
+            hesap_no = cell(14)
 
             if para_birimi not in ("TL", "USD"):
                 para_birimi = "TL"
 
             cek = {
-                "ref_no":      ref_no,
-                "cek_no":      cek_no,
-                "tarih":       tarih,
-                "vade":        vade,
-                "meblagh":     meblagh,
-                "odenen":      odenen,
-                "kalan":       kalan,
+                "ref_no": ref_no,
+                "cek_no": cek_no,
+                "tarih": tarih,
+                "vade": vade,
+                "meblagh": meblagh,
+                "odenen": odenen,
+                "kalan": kalan,
                 "para_birimi": para_birimi,
-                "durum":       pozisyon,
-                "ch_kodu":     ch_kodu,
-                "ch_ismi":     ch_ismi,
-                "banka":       banka,
-                "sube":        sube,
-                "hesap_no":    hesap_no,
+                "durum": pozisyon,
+                "ch_kodu": ch_kodu,
+                "ch_ismi": ch_ismi,
+                "banka": banka,
+                "sube": sube,
+                "hesap_no": hesap_no,
             }
-
             if para_birimi == "USD":
                 usd_cekler.append(cek)
             else:
                 tl_cekler.append(cek)
 
         return tl_cekler, usd_cekler, []
-
     except Exception as e:
         return [], [], [f"Cek dosyasi okuma hatasi: {str(e)}"]
+
+
 def export_excel(odemeler, hafta_adi, kur=38.5):
     """Ödeme listesini Excel'e aktarır."""
     from openpyxl import Workbook
@@ -245,16 +350,17 @@ def export_excel(odemeler, hafta_adi, kur=38.5):
         by_day[day].append(o)
 
     GUNLER = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"]
+
     row = 3
     tl_toplam = 0
     usd_toplam = 0
 
     for day in sorted(by_day.keys()):
-        # Gün başlığı
         try:
             gun_adi = GUNLER[pd.to_datetime(day).weekday() + 1 if pd.to_datetime(day).weekday() < 6 else 0]
         except Exception:
             gun_adi = ""
+
         ws.merge_cells(f"A{row}:H{row}")
         ws[f"A{row}"] = f"── {gun_adi} {day} ──"
         ws[f"A{row}"].font = Font(bold=True, color="FFFFFF")
@@ -271,11 +377,9 @@ def export_excel(odemeler, hafta_adi, kur=38.5):
             ws.cell(row=row, column=6, value=o.get("tutar_usd") or "")
             ws.cell(row=row, column=7, value=DURUM_LABELS.get(o.get("durum", "bekliyor"), "Bekliyor"))
             ws.cell(row=row, column=8, value=o.get("kategori", "diger"))
-
             if o.get("durum") == "odendi":
                 for col in range(1, 9):
                     ws.cell(row=row, column=col).fill = PatternFill("solid", fgColor="D1FAE5")
-
             tl_toplam += o.get("tutar_tl") or 0
             usd_toplam += o.get("tutar_usd") or 0
             row += 1
@@ -307,6 +411,7 @@ def create_sample_excel():
     """Örnek Excel şablonu oluşturur."""
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Ödeme Listesi"
@@ -315,7 +420,6 @@ def create_sample_excel():
     ws.append([])
     ws.append(["HAFTA", "FİRMA", "AÇIKLAMA", "CARİ BANKA / IBAN", "VADE", "TUTAR TL", "TUTAR USD", "KATEGORİ"])
 
-    # Başlık satırını formatla
     for col in range(1, 9):
         cell = ws.cell(row=3, column=col)
         cell.font = Font(bold=True, color="FFFFFF", size=10)
@@ -331,7 +435,6 @@ def create_sample_excel():
     for o in ornekler:
         ws.append(o)
 
-    # Sütun genişlikleri
     ws.column_dimensions["A"].width = 20
     ws.column_dimensions["B"].width = 25
     ws.column_dimensions["C"].width = 20
