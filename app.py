@@ -1745,7 +1745,7 @@ elif sayfa == "💳 Bu Hafta":
                         except Exception:
                             pass
 
-                    with st.expander("📅 Vadeyi Ötele", expanded=False):
+                    with st.popover("📅 Vadeyi Ötele", use_container_width=True):
                         col_tarih, col_kaydet = st.columns([3, 1])
                         with col_tarih:
                             yeni_vade = st.date_input(
