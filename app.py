@@ -11,7 +11,7 @@ from database import (
     initialize_db, get_tum_haftalar, get_aktif_hafta,
     hafta_ekle, hafta_aktif_yap, hafta_sil,
     get_hafta_odemeler, odeme_ekle_bulk, odeme_ekle_manuel,
-    odeme_durum_guncelle, odeme_sil, get_hafta_ozet,
+    odeme_durum_guncelle, odeme_sil, odeme_vade_guncelle, get_hafta_ozet,
     get_bankalar, banka_ekle, banka_guncelle, banka_sil,
     get_cekler, cek_ekle_bulk, cek_sil, cek_sil_hepsi,
 )
@@ -1607,10 +1607,49 @@ elif sayfa == "💳 Bu Hafta":
 
     st.markdown("---")
 
-    # Gün bazında grupla
+    # ─── KATEGORİ FİLTRESİ ───
+    # Mevcut ödemelerde hangi kategoriler var bul
+    kategori_sayilari = {}
+    for o in odemeler:
+        k = o.get("kategori") or "diger"
+        kategori_sayilari[k] = kategori_sayilari.get(k, 0) + 1
+
+    # Filter seçenekleri: "Tümü" + kullanılan kategoriler
+    filter_opts = ["Tümü"]
+    filter_labels = {"Tümü": f"🔍 Tümü ({len(odemeler)})"}
+    for kat_key, cnt in sorted(kategori_sayilari.items(),
+                                key=lambda x: KATEGORILER.get(x[0], {"oncelik": 99}).get("oncelik", 99)):
+        label = KATEGORILER.get(kat_key, {}).get("label", kat_key)
+        filter_opts.append(kat_key)
+        filter_labels[kat_key] = f"{label} ({cnt})"
+
+    col_filt1, col_filt2 = st.columns([3, 1])
+    with col_filt1:
+        secilen_kategori = st.selectbox(
+            "🏷️ Kategori Filtresi",
+            filter_opts,
+            format_func=lambda k: filter_labels[k],
+            key="bu_hafta_kat_filter"
+        )
+    with col_filt2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        # Sadece bekleyenler checkbox
+        sadece_bekleyen = st.checkbox("Sadece bekleyenler", key="bu_hafta_sadece_bekleyen")
+
+    # Filtre uygula
+    filtrelenmis = odemeler
+    if secilen_kategori != "Tümü":
+        filtrelenmis = [o for o in filtrelenmis if (o.get("kategori") or "diger") == secilen_kategori]
+    if sadece_bekleyen:
+        filtrelenmis = [o for o in filtrelenmis if o["durum"] == "bekliyor"]
+
+    if not filtrelenmis:
+        st.info("🔍 Seçilen filtrelere uygun ödeme bulunamadı. Filtreyi değiştirin.")
+
+    # Gün bazında grupla (filtre boş olsa bile by_day tanımlı kalır, for loop boş çalışır)
     from collections import defaultdict
     by_day = defaultdict(list)
-    for o in odemeler:
+    for o in filtrelenmis:
         day = (o.get("vade") or "")[:10] or "?"
         by_day[day].append(o)
 
@@ -1682,7 +1721,7 @@ elif sayfa == "💳 Bu Hafta":
                 with col5:
                     if is_odendi:
                         if st.button(f"↩ Geri Al", key=f"geri_{o['id']}"):
-                            odeme_durum_guncelle(o["id"], "bekliyor")
+                            odeme_durum_guncelle(o["id"], "bekliyor", kur=kur)
                             st.rerun()
                     else:
                         banka_options = {f"{b['hesap_adi']} ({b['para_birimi']})": b["id"] for b in bankalar}
@@ -1693,6 +1732,52 @@ elif sayfa == "💳 Bu Hafta":
                             banka_id = banka_options.get(sec_banka)
                             odeme_durum_guncelle(o["id"], "odendi", banka_id, kur)
                             st.rerun()
+
+                # ─── Vade Öteleme (sadece bekleyenler için) ───
+                if not is_odendi:
+                    # Güvenli vade parse
+                    mevcut_vade = date.today()
+                    if o.get("vade"):
+                        try:
+                            parsed = pd.to_datetime(o.get("vade"))
+                            if pd.notna(parsed):
+                                mevcut_vade = parsed.date()
+                        except Exception:
+                            pass
+
+                    with st.expander("📅 Vadeyi Ötele", expanded=False):
+                        col_tarih, col_kaydet = st.columns([3, 1])
+                        with col_tarih:
+                            yeni_vade = st.date_input(
+                                "Yeni vade tarihi",
+                                value=mevcut_vade,
+                                key=f"vade_{o['id']}",
+                                label_visibility="collapsed"
+                            )
+                        with col_kaydet:
+                            if st.button("💾 Ötele", key=f"vade_save_{o['id']}", type="primary", use_container_width=True):
+                                odeme_vade_guncelle(o["id"], yeni_vade)
+                                st.success(f"Vade {yeni_vade.strftime('%d.%m.%Y')} olarak güncellendi.")
+                                st.rerun()
+
+                        # Hızlı öteleme butonları
+                        col_h1, col_h2, col_h3, col_h4 = st.columns(4)
+                        with col_h1:
+                            if st.button("+1 gün", key=f"v1_{o['id']}", use_container_width=True):
+                                odeme_vade_guncelle(o["id"], mevcut_vade + timedelta(days=1))
+                                st.rerun()
+                        with col_h2:
+                            if st.button("+3 gün", key=f"v3_{o['id']}", use_container_width=True):
+                                odeme_vade_guncelle(o["id"], mevcut_vade + timedelta(days=3))
+                                st.rerun()
+                        with col_h3:
+                            if st.button("+7 gün", key=f"v7_{o['id']}", use_container_width=True):
+                                odeme_vade_guncelle(o["id"], mevcut_vade + timedelta(days=7))
+                                st.rerun()
+                        with col_h4:
+                            if st.button("+30 gün", key=f"v30_{o['id']}", use_container_width=True):
+                                odeme_vade_guncelle(o["id"], mevcut_vade + timedelta(days=30))
+                                st.rerun()
 
                 st.divider()
 
@@ -2072,7 +2157,8 @@ elif sayfa == "✅ Ödenenler":
     geri_sec = st.selectbox("Ödeme seç", [f"{o['firma']} — {fmt_tarih(o.get('vade'))}" for o in odenenler])
     if st.button("↩ Geri Al", type="secondary"):
         idx = [f"{o['firma']} — {fmt_tarih(o.get('vade'))}" for o in odenenler].index(geri_sec)
-        odeme_durum_guncelle(odenenler[idx]["id"], "bekliyor")
+        kur_now = get_kur()
+        odeme_durum_guncelle(odenenler[idx]["id"], "bekliyor", kur=kur_now)
         st.success("Geri alındı.")
         st.rerun()
 

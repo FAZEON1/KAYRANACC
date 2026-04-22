@@ -164,18 +164,103 @@ def odeme_ekle_manuel(hafta_id, firma, aciklama, cari_banka, vade, tutar_tl, tut
     }).execute()
 
 
-def odeme_durum_guncelle(odeme_id, durum):
+def odeme_durum_guncelle(odeme_id, durum, banka_id=None, kur=None):
+    """
+    Ödeme durumunu günceller.
+    - banka_id verilirse: Ödeme tutarı ilgili bankadan düşülür.
+    - Geri alma (durum='bekliyor'): Banka bakiyesi iade edilir (banka_id kolonu varsa).
+
+    ÖNEMLİ: Supabase'de 'banka_id' kolonu OLMASA BİLE bu fonksiyon çalışır.
+    Sadece otomatik banka bakiye düşme/iade özelliği kapalı olur.
+    """
     sb = get_client()
     today = date.today().isoformat() if durum == "odendi" else None
-    sb.table("odemeler").update({
+
+    # Önce mevcut ödeme bilgisini al
+    try:
+        mevcut = sb.table("odemeler").select("*").eq("id", odeme_id).execute()
+        if not mevcut.data:
+            return
+        odeme = mevcut.data[0]
+    except Exception:
+        return
+
+    # Önceki banka_id (kolon yoksa None olur)
+    onceki_banka_id = odeme.get("banka_id")
+    onceki_durum = odeme.get("durum")
+
+    # ─── Ödeme kaydını güncelle (banka_id ayrı deneyelim) ───
+    update_data = {
         "durum": durum,
         "odendi_tarih": today,
-    }).eq("id", odeme_id).execute()
+    }
+    try:
+        sb.table("odemeler").update(update_data).eq("id", odeme_id).execute()
+    except Exception:
+        return
+
+    # ─── banka_id kolonunu ayrı güncelle (varsa) ───
+    banka_id_kolonu_var = True
+    if durum == "odendi" and banka_id:
+        try:
+            sb.table("odemeler").update({"banka_id": banka_id}).eq("id", odeme_id).execute()
+        except Exception:
+            banka_id_kolonu_var = False  # kolon yok, ama ödeme durumu güncellendi
+
+    # ─── Banka bakiyesi güncelleme (opsiyonel) ───
+    try:
+        tutar_tl = float(odeme.get("tutar_tl") or 0)
+        tutar_usd = float(odeme.get("tutar_usd") or 0)
+        kur_val = float(kur) if kur and float(kur) > 0 else 1.0
+
+        # 1) Ödendi → banka bakiyesinden düş (sadece önceki durum "bekliyor" iken)
+        # ÖNEMLİ: Eğer zaten "odendi" ise tekrar düşme yapma (çifte düşüm koruması)
+        if durum == "odendi" and banka_id and onceki_durum != "odendi":
+            banka_res = sb.table("bankalar").select("*").eq("id", banka_id).execute()
+            if banka_res.data:
+                banka = banka_res.data[0]
+                yeni_bakiye = float(banka["bakiye"])
+                if banka["para_birimi"] == "TL":
+                    yeni_bakiye -= tutar_tl + (tutar_usd * kur_val)
+                elif banka["para_birimi"] == "USD":
+                    yeni_bakiye -= tutar_usd + (tutar_tl / kur_val)
+                else:
+                    yeni_bakiye -= tutar_tl
+                sb.table("bankalar").update({"bakiye": yeni_bakiye}).eq("id", banka_id).execute()
+
+        # 2) Geri al (odendi → bekliyor): önceki bankaya iade — sadece banka_id kolonu varsa
+        elif durum == "bekliyor" and onceki_durum == "odendi" and onceki_banka_id:
+            banka_res = sb.table("bankalar").select("*").eq("id", onceki_banka_id).execute()
+            if banka_res.data:
+                banka = banka_res.data[0]
+                yeni_bakiye = float(banka["bakiye"])
+                if banka["para_birimi"] == "TL":
+                    yeni_bakiye += tutar_tl + (tutar_usd * kur_val)
+                elif banka["para_birimi"] == "USD":
+                    yeni_bakiye += tutar_usd + (tutar_tl / kur_val)
+                else:
+                    yeni_bakiye += tutar_tl
+                sb.table("bankalar").update({"bakiye": yeni_bakiye}).eq("id", onceki_banka_id).execute()
+                # banka_id'yi temizle (varsa)
+                try:
+                    sb.table("odemeler").update({"banka_id": None}).eq("id", odeme_id).execute()
+                except Exception:
+                    pass
+    except Exception:
+        # Banka güncellemesi başarısız olsa bile ödeme durumu güncellemiş olur
+        pass
 
 
 def odeme_sil(odeme_id):
     sb = get_client()
     sb.table("odemeler").delete().eq("id", odeme_id).execute()
+
+
+def odeme_vade_guncelle(odeme_id, yeni_vade):
+    """Ödemenin vade tarihini günceller."""
+    sb = get_client()
+    vade_str = yeni_vade.isoformat() if hasattr(yeni_vade, "isoformat") else str(yeni_vade)
+    sb.table("odemeler").update({"vade": vade_str}).eq("id", odeme_id).execute()
 
 
 # ════════════════════════════════════════════════════════════════════
