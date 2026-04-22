@@ -1757,7 +1757,7 @@ elif sayfa == "🏦 Banka Bakiyeleri":
         st.markdown("**➕ Yeni Hesap Ekle**")
         with st.form("banka_ekle"):
             hesap_adi = st.text_input("Hesap Adı", placeholder="Örn: YKB TL Hesabı")
-            bakiye = st.number_input("Bakiye", min_value=0.0, step=1000.0)
+            bakiye = st.number_input("Bakiye", min_value=0.0, step=0.01, format="%.2f")
             para_birimi = st.selectbox("Para Birimi", ["TL", "USD", "EUR"])
             if st.form_submit_button("➕ Ekle", type="primary"):
                 if hesap_adi:
@@ -1774,7 +1774,7 @@ elif sayfa == "🏦 Banka Bakiyeleri":
 
             with st.form("banka_duzenle"):
                 yeni_ad = st.text_input("Hesap Adı", value=sec_banka["hesap_adi"])
-                yeni_bakiye = st.number_input("Bakiye", value=float(sec_banka["bakiye"]), step=1000.0)
+                yeni_bakiye = st.number_input("Bakiye", value=float(sec_banka["bakiye"]), step=0.01, format="%.2f")
                 yeni_pb = st.selectbox("Para Birimi", ["TL", "USD", "EUR"],
                                        index=["TL", "USD", "EUR"].index(sec_banka["para_birimi"]))
                 col_a, col_b = st.columns(2)
