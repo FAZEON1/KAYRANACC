@@ -187,18 +187,24 @@ def get_bankalar():
     return res.data or []
 
 
-def banka_ekle(hesap_adi, para_birimi, bakiye):
+def banka_ekle(hesap_adi, bakiye, para_birimi):
+    """Yeni banka hesabı ekler. Parametre sırası: hesap_adi, bakiye, para_birimi"""
     sb = get_client()
     sb.table("bankalar").insert({
         "hesap_adi": hesap_adi,
         "para_birimi": para_birimi,
-        "bakiye": bakiye,
+        "bakiye": float(bakiye) if bakiye is not None else 0,
     }).execute()
 
 
-def banka_guncelle(banka_id, bakiye):
+def banka_guncelle(banka_id, hesap_adi, bakiye, para_birimi):
+    """Banka hesabını günceller. app.py'deki çağrıya uygun."""
     sb = get_client()
-    sb.table("bankalar").update({"bakiye": bakiye}).eq("id", banka_id).execute()
+    sb.table("bankalar").update({
+        "hesap_adi": hesap_adi,
+        "bakiye": float(bakiye) if bakiye is not None else 0,
+        "para_birimi": para_birimi,
+    }).eq("id", banka_id).execute()
 
 
 def banka_sil(banka_id):
