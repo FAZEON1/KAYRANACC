@@ -1381,13 +1381,13 @@ if sayfa == "📊 Dashboard":
         '<div style="background:#FDF4FF;border-radius:12px;padding:16px 18px;border:1px solid #E9D5FF;border-top:3px solid #9333EA;text-align:center">'
         '<div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#7E22CE;margin-bottom:8px">Toplam Varlık (TL)</div>'
         f'<div style="font-size:20px;font-weight:700;color:#6B21A8;font-family:monospace">₺{fmt(toplam_varlik_tl)}</div>'
-        f'<div style="font-size:11px;margin-top:6px;color:#9333EA">TL + (USD × {kur})</div>'
+        f'<div style="font-size:11px;margin-top:6px;color:#9333EA;font-family:monospace">≈ ${fmt(toplam_varlik_usd)}</div>'
         '</div>'
-        # Kart 4: Toplam Varlık (USD cinsinden) ← YENİ
+        # Kart 4: Toplam Varlık (USD cinsinden)
         '<div style="background:#FFF7ED;border-radius:12px;padding:16px 18px;border:1px solid #FED7AA;border-top:3px solid #EA580C;text-align:center">'
         '<div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#C2410C;margin-bottom:8px">Toplam Varlık (USD)</div>'
         f'<div style="font-size:20px;font-weight:700;color:#9A3412;font-family:monospace">${fmt(toplam_varlik_usd)}</div>'
-        f'<div style="font-size:11px;margin-top:6px;color:#EA580C">USD + (TL ÷ {kur})</div>'
+        f'<div style="font-size:11px;margin-top:6px;color:#EA580C;font-family:monospace">≈ ₺{fmt(toplam_varlik_tl)}</div>'
         '</div>'
         '</div>'
     )
