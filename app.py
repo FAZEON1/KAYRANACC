@@ -1362,22 +1362,32 @@ if sayfa == "📊 Dashboard":
     # ── Toplam Varlıklar (Banka Bakiyelerinden) ──
     banka_eur = sum(b["bakiye"] for b in bankalar if b["para_birimi"] == "EUR")
     toplam_varlik_tl = banka_tl + (banka_usd * kur)
+    toplam_varlik_usd = banka_usd + (banka_tl / kur if kur > 0 else 0)
     varlik_html = (
-        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px">'
+        '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">'
+        # Kart 1: TL Varlık
         '<div style="background:#F0F9FF;border-radius:12px;padding:16px 18px;border:1px solid #BAE6FD;border-top:3px solid #0284C7;text-align:center">'
         '<div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#0369A1;margin-bottom:8px">Toplam TL Varlık</div>'
-        f'<div style="font-size:22px;font-weight:700;color:#075985;font-family:monospace">₺{fmt(banka_tl)}</div>'
+        f'<div style="font-size:20px;font-weight:700;color:#075985;font-family:monospace">₺{fmt(banka_tl)}</div>'
         '<div style="font-size:11px;margin-top:6px;color:#0369A1">Tüm TL hesaplar</div>'
         '</div>'
+        # Kart 2: USD Varlık
         '<div style="background:#F0FDF4;border-radius:12px;padding:16px 18px;border:1px solid #BBF7D0;border-top:3px solid #16A34A;text-align:center">'
         '<div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#166534;margin-bottom:8px">Toplam USD Varlık</div>'
-        f'<div style="font-size:22px;font-weight:700;color:#15803D;font-family:monospace">${fmt(banka_usd)}</div>'
+        f'<div style="font-size:20px;font-weight:700;color:#15803D;font-family:monospace">${fmt(banka_usd)}</div>'
         f'<div style="font-size:11px;margin-top:6px;color:#16A34A">≈ ₺{fmt(banka_usd * kur)}</div>'
         '</div>'
+        # Kart 3: Toplam Varlık (TL cinsinden)
         '<div style="background:#FDF4FF;border-radius:12px;padding:16px 18px;border:1px solid #E9D5FF;border-top:3px solid #9333EA;text-align:center">'
         '<div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#7E22CE;margin-bottom:8px">Toplam Varlık (TL)</div>'
-        f'<div style="font-size:22px;font-weight:700;color:#6B21A8;font-family:monospace">₺{fmt(toplam_varlik_tl)}</div>'
-        f'<div style="font-size:11px;margin-top:6px;color:#9333EA">TL + USD x {kur}</div>'
+        f'<div style="font-size:20px;font-weight:700;color:#6B21A8;font-family:monospace">₺{fmt(toplam_varlik_tl)}</div>'
+        f'<div style="font-size:11px;margin-top:6px;color:#9333EA">TL + (USD × {kur})</div>'
+        '</div>'
+        # Kart 4: Toplam Varlık (USD cinsinden) ← YENİ
+        '<div style="background:#FFF7ED;border-radius:12px;padding:16px 18px;border:1px solid #FED7AA;border-top:3px solid #EA580C;text-align:center">'
+        '<div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#C2410C;margin-bottom:8px">Toplam Varlık (USD)</div>'
+        f'<div style="font-size:20px;font-weight:700;color:#9A3412;font-family:monospace">${fmt(toplam_varlik_usd)}</div>'
+        f'<div style="font-size:11px;margin-top:6px;color:#EA580C">USD + (TL ÷ {kur})</div>'
         '</div>'
         '</div>'
     )
