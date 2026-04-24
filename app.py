@@ -1013,9 +1013,47 @@ def tomorrow_iso():
 
 
 def get_kur():
+    """
+    USD/TL kurunu döndürür.
+    İlk çağrıda (session başladığında) otomatik olarak API'den günceli çeker.
+    Başarısız olursa 38.50 fallback kullanır.
+    Bir kez çekildikten sonra session boyunca aynı değeri kullanır (manuel güncellenirse değişir).
+    """
     if "kur" not in st.session_state:
-        st.session_state.kur = 38.50
+        # İlk defa çağrılıyor — API'den otomatik çek
+        st.session_state.kur = 38.50  # önce fallback değer
+        try:
+            kur_cekilen, basarili = _fetch_kur_ilk_yukleme()
+            if basarili and kur_cekilen and kur_cekilen > 1:
+                st.session_state.kur = kur_cekilen
+                st.session_state.kur_otomatik_cekildi = True
+        except Exception:
+            pass  # hata olsa da uygulama çalışsın, fallback kullanılır
     return st.session_state.kur
+
+
+def _fetch_kur_ilk_yukleme():
+    """İlk yüklemede kur çekmek için ayrı fonksiyon — toast/spinner olmadan sessizce çalışır."""
+    apis = [
+        ("https://open.er-api.com/v6/latest/USD", lambda d: round(d["rates"]["TRY"], 2)),
+        ("https://api.exchangerate-api.com/v4/latest/USD", lambda d: round(d["rates"]["TRY"], 2)),
+        ("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json", lambda d: round(d["usd"]["try"], 2)),
+        ("https://api.frankfurter.app/latest?from=USD&to=TRY", lambda d: round(d["rates"]["TRY"], 2)),
+    ]
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json",
+    }
+    for url, parser in apis:
+        try:
+            r = requests.get(url, timeout=5, headers=headers)
+            d = r.json()
+            kur = parser(d)
+            if kur and kur > 1:
+                return kur, True
+        except Exception:
+            continue
+    return 38.50, False
 
 
 def fetch_kur_live():
@@ -1152,12 +1190,25 @@ with st.sidebar:
     # Kur paneli
     st.markdown("**💱 USD/TL Kur**")
 
-    if "kur" not in st.session_state:
-        st.session_state.kur = 38.50
+    # get_kur() çağır — session yeni ise otomatik API'den çekilir
+    mevcut_kur = get_kur()
+
+    # İlk otomatik çekim olduysa küçük bildirim
+    if st.session_state.get("kur_otomatik_cekildi") and not st.session_state.get("kur_bildirim_gosterildi"):
+        st.markdown(
+            f'<div style="background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);'
+            f'border-radius:8px;padding:6px 10px;margin-bottom:8px;font-size:11px;color:#86EFAC;'
+            f'display:flex;align-items:center;gap:6px;">'
+            f'<span style="font-size:13px;">✓</span>'
+            f'<span>Güncel kur otomatik alındı</span>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+        st.session_state.kur_bildirim_gosterildi = True
 
     yeni_kur = st.number_input(
         "",
-        value=float(st.session_state.kur),
+        value=float(mevcut_kur),
         step=0.01,
         min_value=1.0,
         format="%.2f",
