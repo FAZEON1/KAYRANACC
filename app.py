@@ -11,7 +11,7 @@ from database import (
     initialize_db, get_tum_haftalar, get_aktif_hafta,
     hafta_ekle, hafta_aktif_yap, hafta_sil,
     get_hafta_odemeler, odeme_ekle_bulk, odeme_ekle_manuel,
-    odeme_durum_guncelle, odeme_sil, odeme_vade_guncelle, get_hafta_ozet,
+    odeme_durum_guncelle, odeme_sil, odeme_vade_guncelle, odeme_tutar_guncelle, get_hafta_ozet,
     get_bankalar, banka_ekle, banka_guncelle, banka_sil,
     get_cekler, cek_ekle_bulk, cek_sil, cek_sil_hepsi,
 )
@@ -1607,39 +1607,40 @@ elif sayfa == "💳 Bu Hafta":
 
     st.markdown("---")
 
-    # ─── KATEGORİ FİLTRESİ ───
+    # ─── KATEGORİ FİLTRESİ (ÇOKLU SEÇİM) ───
     # Mevcut ödemelerde hangi kategoriler var bul
     kategori_sayilari = {}
     for o in odemeler:
         k = o.get("kategori") or "diger"
         kategori_sayilari[k] = kategori_sayilari.get(k, 0) + 1
 
-    # Filter seçenekleri: "Tümü" + kullanılan kategoriler
-    filter_opts = ["Tümü"]
-    filter_labels = {"Tümü": f"🔍 Tümü ({len(odemeler)})"}
-    for kat_key, cnt in sorted(kategori_sayilari.items(),
-                                key=lambda x: KATEGORILER.get(x[0], {"oncelik": 99}).get("oncelik", 99)):
-        label = KATEGORILER.get(kat_key, {}).get("label", kat_key)
-        filter_opts.append(kat_key)
-        filter_labels[kat_key] = f"{label} ({cnt})"
+    # Multiselect için listesi — kullanılan kategoriler önceliğe göre sıralı
+    filter_opts_multi = sorted(
+        kategori_sayilari.keys(),
+        key=lambda k: KATEGORILER.get(k, {"oncelik": 99}).get("oncelik", 99)
+    )
+    filter_labels_multi = {
+        k: f"{KATEGORILER.get(k, {}).get('label', k)} ({kategori_sayilari[k]})"
+        for k in filter_opts_multi
+    }
 
     col_filt1, col_filt2 = st.columns([3, 1])
     with col_filt1:
-        secilen_kategori = st.selectbox(
-            "🏷️ Kategori Filtresi",
-            filter_opts,
-            format_func=lambda k: filter_labels[k],
-            key="bu_hafta_kat_filter"
+        secilen_kategoriler = st.multiselect(
+            f"🏷️ Kategori Filtresi (Boş bırakırsan tümü gösterilir — {len(odemeler)} ödeme)",
+            options=filter_opts_multi,
+            format_func=lambda k: filter_labels_multi[k],
+            key="bu_hafta_kat_multi_v2",
+            placeholder="Bir veya birden fazla kategori seçin (boş = tümü)"
         )
     with col_filt2:
         st.markdown("<br>", unsafe_allow_html=True)
-        # Sadece bekleyenler checkbox
         sadece_bekleyen = st.checkbox("Sadece bekleyenler", key="bu_hafta_sadece_bekleyen")
 
     # Filtre uygula
     filtrelenmis = odemeler
-    if secilen_kategori != "Tümü":
-        filtrelenmis = [o for o in filtrelenmis if (o.get("kategori") or "diger") == secilen_kategori]
+    if secilen_kategoriler:  # boş değilse
+        filtrelenmis = [o for o in filtrelenmis if (o.get("kategori") or "diger") in secilen_kategoriler]
     if sadece_bekleyen:
         filtrelenmis = [o for o in filtrelenmis if o["durum"] == "bekliyor"]
 
@@ -1713,10 +1714,24 @@ elif sayfa == "💳 Bu Hafta":
                     )
 
                 with col4:
-                    if o.get("tutar_tl"):
-                        st.markdown(f'<b style="color:#065F46;font-size:14px">₺{fmt(o["tutar_tl"])}</b>', unsafe_allow_html=True)
-                    elif o.get("tutar_usd"):
-                        st.markdown(f'<b style="color:#1E40AF;font-size:14px">${fmt(o["tutar_usd"])}</b>', unsafe_allow_html=True)
+                    col4a, col4b = st.columns([4, 1])
+                    with col4a:
+                        if o.get("tutar_tl"):
+                            st.markdown(f'<b style="color:#065F46;font-size:14px">₺{fmt(o["tutar_tl"])}</b>', unsafe_allow_html=True)
+                        elif o.get("tutar_usd"):
+                            st.markdown(f'<b style="color:#1E40AF;font-size:14px">${fmt(o["tutar_usd"])}</b>', unsafe_allow_html=True)
+                    with col4b:
+                        if not is_odendi:
+                            # Tutar düzenleme toggle
+                            edit_key = f"edit_tutar_toggle_{o['id']}"
+                            if st.session_state.get(edit_key, False):
+                                if st.button("❌", key=f"close_edit_{o['id']}", help="Düzenlemeyi kapat"):
+                                    st.session_state[edit_key] = False
+                                    st.rerun()
+                            else:
+                                if st.button("✏️", key=f"open_edit_{o['id']}", help="Tutarı revize et"):
+                                    st.session_state[edit_key] = True
+                                    st.rerun()
 
                 with col5:
                     if is_odendi:
@@ -1733,6 +1748,50 @@ elif sayfa == "💳 Bu Hafta":
                             odeme_durum_guncelle(o["id"], "odendi", banka_id, kur)
                             st.rerun()
 
+                # ─── Tutar Revize Etme (sadece bekleyenler için) ───
+                if not is_odendi and st.session_state.get(f"edit_tutar_toggle_{o['id']}", False):
+                    st.markdown(
+                        '<div style="background:#FEF3C7;border:1px solid #FCD34D;'
+                        'border-radius:10px;padding:12px 16px;margin:4px 0 8px 24px;">'
+                        '<b style="color:#92400E;font-size:12px">💰 Tutar Revize</b>',
+                        unsafe_allow_html=True
+                    )
+                    col_tl, col_usd, col_kaydet = st.columns([2, 2, 1])
+                    with col_tl:
+                        yeni_tl = st.number_input(
+                            "TL (₺)",
+                            value=float(o.get("tutar_tl") or 0),
+                            min_value=0.0,
+                            step=0.01,
+                            format="%.2f",
+                            key=f"edit_tl_{o['id']}"
+                        )
+                    with col_usd:
+                        yeni_usd = st.number_input(
+                            "USD ($)",
+                            value=float(o.get("tutar_usd") or 0),
+                            min_value=0.0,
+                            step=0.01,
+                            format="%.2f",
+                            key=f"edit_usd_{o['id']}"
+                        )
+                    with col_kaydet:
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        if st.button("💾 Kaydet", key=f"save_tutar_{o['id']}", type="primary", use_container_width=True):
+                            # İki alan aynı anda 0 ise hata ver
+                            if yeni_tl <= 0 and yeni_usd <= 0:
+                                st.error("En az bir tutar (TL veya USD) 0'dan büyük olmalı.")
+                            else:
+                                odeme_tutar_guncelle(
+                                    o["id"],
+                                    tutar_tl=yeni_tl,
+                                    tutar_usd=yeni_usd
+                                )
+                                st.session_state[f"edit_tutar_toggle_{o['id']}"] = False
+                                st.success(f"✅ Tutar güncellendi")
+                                st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+
                 # ─── Vade Öteleme (sadece bekleyenler için) ───
                 if not is_odendi:
                     # Güvenli vade parse
@@ -1745,7 +1804,18 @@ elif sayfa == "💳 Bu Hafta":
                         except Exception:
                             pass
 
-                    with st.popover("📅 Vadeyi Ötele", use_container_width=True):
+                    # Expander yerine toggle (checkbox) — expander içinde expander yasak
+                    otele_goster = st.checkbox(
+                        "📅 Vadeyi Ötele",
+                        key=f"vade_toggle_{o['id']}",
+                        value=False
+                    )
+                    if otele_goster:
+                        st.markdown(
+                            '<div style="background:#F8FAFC;border:1px solid #E2E8F0;'
+                            'border-radius:10px;padding:12px 16px;margin:4px 0 8px 24px;">',
+                            unsafe_allow_html=True
+                        )
                         col_tarih, col_kaydet = st.columns([3, 1])
                         with col_tarih:
                             yeni_vade = st.date_input(
@@ -1778,6 +1848,7 @@ elif sayfa == "💳 Bu Hafta":
                             if st.button("+30 gün", key=f"v30_{o['id']}", use_container_width=True):
                                 odeme_vade_guncelle(o["id"], mevcut_vade + timedelta(days=30))
                                 st.rerun()
+                        st.markdown('</div>', unsafe_allow_html=True)
 
                 st.divider()
 

@@ -263,6 +263,21 @@ def odeme_vade_guncelle(odeme_id, yeni_vade):
     sb.table("odemeler").update({"vade": vade_str}).eq("id", odeme_id).execute()
 
 
+def odeme_tutar_guncelle(odeme_id, tutar_tl=None, tutar_usd=None):
+    """
+    Ödemenin TL/USD tutarlarını günceller.
+    - 0 veya None → o alan NULL olarak kaydedilir (temizlenir).
+    - Pozitif değer → güncellenir.
+    Hem tutar_tl hem tutar_usd her zaman güncellenir.
+    """
+    sb = get_client()
+    update_data = {
+        "tutar_tl": float(tutar_tl) if tutar_tl and float(tutar_tl) > 0 else None,
+        "tutar_usd": float(tutar_usd) if tutar_usd and float(tutar_usd) > 0 else None,
+    }
+    sb.table("odemeler").update(update_data).eq("id", odeme_id).execute()
+
+
 # ════════════════════════════════════════════════════════════════════
 # BANKALAR
 # ════════════════════════════════════════════════════════════════════
