@@ -3277,16 +3277,19 @@ elif sayfa == "💰 Toplam Aktifler":
                         pass
 
         # ─── Pazaryeri firmaları: "TOPLAM TUTAR" sütunlarını bul ───
-        pazaryerleri = {}  # {firma_adi: toplam_tutar}
+        # ÖNEMLİ: Excel'de her pazaryerinin altında bir ALT TOPLAM satırı var
+        # (firma kodu boş, ama toplam değer dolu). Bunları atlamak için
+        # firma kodu sütununu (col_idx - 3) kontrol ediyoruz.
+        pazaryerleri = {}
         try:
             for col_idx in range(df.shape[1]):
                 header = df.iloc[1, col_idx]
                 if pd.notna(header) and isinstance(header, str) and "TOPLAM TUTAR" in header.upper():
-                    # Bu sütun TOPLAM TUTAR — firma adı için geriye doğru git
-                    # "STOK", "SATIŞ", "FIYAT", "FİYAT", "MİKT", "ADET", "İADE" geçmeyen ilk hücre = firma adı
+                    # Firma adı için geriye doğru tara
                     firma_adi = "Bilinmeyen"
                     blacklist = ["STOK", "SATIŞ", "FIYAT", "FİYAT", "MIKT", "MİKT", "ADET", "İADE", "TOPLAM"]
-                    for back in range(1, 5):  # 1-4 geriye bak
+                    firma_kod_col = None  # firma kodu sütunu (header'da firma adı olan)
+                    for back in range(1, 5):
                         check_col = col_idx - back
                         if check_col < 0:
                             break
@@ -3294,16 +3297,21 @@ elif sayfa == "💰 Toplam Aktifler":
                         if pd.notna(candidate) and isinstance(candidate, str):
                             cand_str = candidate.strip()
                             cand_upper = cand_str.upper()
-                            # Firma adı ise (blacklist'te yok ve uzunluk yeterli)
                             if cand_str and not any(bl in cand_upper for bl in blacklist):
                                 firma_adi = cand_str
+                                firma_kod_col = check_col  # ← bu sütun firma stok kodu içerir
                                 break
 
-                    # Bu sütundaki tüm değerleri topla (header'lar 0,1; veriler 2'den)
+                    # Toplama yaparken firma kodu sütunu BOŞ olan satırları atla (alt toplam = duplicate)
                     toplam = 0.0
                     for i in range(2, len(df)):
                         v = df.iloc[i, col_idx]
                         if pd.notna(v):
+                            # Firma kodu sütunu kontrolü
+                            if firma_kod_col is not None:
+                                kod = df.iloc[i, firma_kod_col]
+                                if pd.isna(kod) or str(kod).strip() == "":
+                                    continue  # alt toplam satırı, atla
                             try:
                                 toplam += float(v)
                             except (ValueError, TypeError):
@@ -3502,8 +3510,8 @@ elif sayfa == "💰 Toplam Aktifler":
 
     # HTML — tek satırlık inline div'ler, boş satır YOK
     detay_html = '<div style="display:flex;flex-direction:column;gap:8px">'
-    detay_html += f'<div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #3B82F6;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700;color:#0F172A">📦 Stok Değeri (marj eklenmiş)</div><div style="font-size:11px;color:#64748B;margin-top:2px">Ham stok: ${fmt(usd_stok)} ÷ 0.85 (kar marjı)</div></div><div style="font-size:18px;font-weight:700;color:#1D4ED8;font-family:monospace">+${fmt(stok_marjli)}</div></div>'
-    detay_html += f'<div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #10B981;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#0F172A">🛒 Pazaryeri Stokları (KDV %20 dahil)</div><div style="font-size:11px;color:#64748B;margin-top:2px">Ham toplam: ${fmt(pazaryeri_toplam_ham)} × 1.20{pazaryeri_detay}</div></div><div style="font-size:18px;font-weight:700;color:#15803D;font-family:monospace;margin-left:14px">+${fmt(pazaryeri_toplam_kdvli)}</div></div>'
+    detay_html += f'<div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #3B82F6;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700;color:#0F172A">📦 G5F Stok Değeri (marj eklenmiş + KDV dahil)</div><div style="font-size:11px;color:#64748B;margin-top:2px">Ham stok: ${fmt(usd_stok)} ÷ 0.85 (kar marjı) × 1.20 (KDV)</div></div><div style="font-size:18px;font-weight:700;color:#1D4ED8;font-family:monospace">+${fmt(stok_marjli)}</div></div>'
+    detay_html += f'<div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #10B981;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#0F172A">🛒 Müşteri Stokları (KDV %20 dahil)</div><div style="font-size:11px;color:#64748B;margin-top:2px">Ham toplam: ${fmt(pazaryeri_toplam_ham)} × 1.20{pazaryeri_detay}</div></div><div style="font-size:18px;font-weight:700;color:#15803D;font-family:monospace;margin-left:14px">+${fmt(pazaryeri_toplam_kdvli)}</div></div>'
     detay_html += f'<div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #8B5CF6;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700;color:#0F172A">🚢 İthalat Ödenmiş Tutar (Yoldaki/Gümrükteki Mal)</div><div style="font-size:11px;color:#64748B;margin-top:2px">İthalat Excel\'inden Ödenen / USD toplamı</div></div><div style="font-size:18px;font-weight:700;color:#6D28D9;font-family:monospace">+${fmt(odenen_ithalat)}</div></div>'
     detay_html += f'<div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #F59E0B;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700;color:#0F172A">🏦 Banka Hesapları (USD eşdeğeri)</div><div style="font-size:11px;color:#64748B;margin-top:2px">USD: ${fmt(banka_usd)} + TL: ₺{fmt(banka_tl)} ÷ {kur}</div></div><div style="font-size:18px;font-weight:700;color:#B45309;font-family:monospace">+${fmt(banka_usd_eqv)}</div></div>'
     if usd_borc or tl_borc or eur_borc:
@@ -3537,8 +3545,8 @@ elif sayfa == "💰 Toplam Aktifler":
         st.markdown(f"""
         **Toplam Aktifler (USD) =**
 
-        - **(Stok Değeri ÷ 0.85) × 1.20** (Stok Excel'inden "USD SON DURUM STOK DEĞERİ" toplamı, %15 marj + %20 KDV dahil)
-        - **+ Pazaryeri Toplamları × 1.20** (HEPSIBURADA + VATAN + EERA + Diğer firmalar TOPLAM TUTAR sütunları, KDV %20 dahil)
+        - **(G5F Stok Değeri ÷ 0.85) × 1.20** (Stok Excel'inden "USD SON DURUM STOK DEĞERİ" toplamı, %15 marj + %20 KDV dahil)
+        - **+ Müşteri Stokları × 1.20** (HEPSIBURADA + VATAN + EERA + Diğer firmalar TOPLAM TUTAR sütunları, KDV %20 dahil)
         - **+ İthalat Ödenmiş Tutar** (İthalat Excel "Ödenen / USD" toplamı)
         - **+ Banka Hesapları USD eşdeğeri** (Uygulamadaki TL hesapları kur ile USD'ye çevrilir)
         - **− Cari Borçlar** (Cari Excel'inden bakiyesi NEGATİF olan kalemler; TL/EUR borçlar kura çevrilir)
