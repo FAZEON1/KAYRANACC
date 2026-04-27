@@ -257,10 +257,55 @@ def odeme_sil(odeme_id):
 
 
 def odeme_vade_guncelle(odeme_id, yeni_vade):
-    """Ödemenin vade tarihini günceller."""
+    """
+    Ödemenin vade tarihini günceller.
+    İlk değişiklikte orijinal_vade kaydedilir, ertelendi_sayisi artırılır.
+    """
     sb = get_client()
     vade_str = yeni_vade.isoformat() if hasattr(yeni_vade, "isoformat") else str(yeni_vade)
-    sb.table("odemeler").update({"vade": vade_str}).eq("id", odeme_id).execute()
+
+    # Mevcut ödeme bilgisini al
+    try:
+        mevcut = sb.table("odemeler").select("*").eq("id", odeme_id).execute()
+        if not mevcut.data:
+            return
+        odeme = mevcut.data[0]
+    except Exception:
+        return
+
+    eski_vade = odeme.get("vade")
+    update_data = {"vade": vade_str}
+
+    # Eğer vade değişiyorsa (aynı gün değilse) erteleme bilgilerini kaydet
+    if eski_vade and str(eski_vade)[:10] != vade_str[:10]:
+        # orijinal_vade ve ertelendi_sayisi kolonları varsa güncelle
+        try:
+            # orijinal_vade ilk defa atanıyorsa, önceki vadeyi kaydet
+            if not odeme.get("orijinal_vade"):
+                update_data["orijinal_vade"] = eski_vade
+            # ertelendi_sayisi'nı artır
+            update_data["ertelendi_sayisi"] = (odeme.get("ertelendi_sayisi") or 0) + 1
+            update_data["son_erteleme_tarih"] = date.today().isoformat()
+        except Exception:
+            pass
+
+    # Güncellemeyi dene; orijinal_vade kolonları yoksa sadece vade güncellensin
+    try:
+        sb.table("odemeler").update(update_data).eq("id", odeme_id).execute()
+    except Exception:
+        # Kolonlar yoksa sadece vadeyi güncelle
+        sb.table("odemeler").update({"vade": vade_str}).eq("id", odeme_id).execute()
+
+
+def get_ertelenen_odemeler():
+    """Ertelendi sayısı 1+ olan tüm ödemeleri döndürür."""
+    sb = get_client()
+    try:
+        res = sb.table("odemeler").select("*").gt("ertelendi_sayisi", 0).execute()
+        return res.data or []
+    except Exception:
+        # ertelendi_sayisi kolonu yoksa boş liste döndür
+        return []
 
 
 def odeme_tutar_guncelle(odeme_id, tutar_tl=None, tutar_usd=None):
@@ -383,3 +428,140 @@ def cek_ekle_bulk(cekler, para_birimi="TL", temizle_onceki=True):
     BATCH = 25
     for i in range(0, len(rows), BATCH):
         sb.table("cekler").insert(rows[i:i+BATCH]).execute()
+
+
+# ════════════════════════════════════════════════════════════════════
+# VİRMANLAR (Bankalar Arası Para Transferi)
+# ════════════════════════════════════════════════════════════════════
+def get_virmanlar(limit=50):
+    """Son virmanları döndürür (yenisiyle eskisine göre sıralı)."""
+    sb = get_client()
+    try:
+        res = sb.table("virmanlar").select("*").order("id", desc=True).limit(limit).execute()
+        return res.data or []
+    except Exception:
+        return []
+
+
+def virman_yap(kaynak_banka_id, hedef_banka_id, tutar, aciklama="", kur_kullanilan=None):
+    """
+    Bankalar arası para transferi yapar:
+    1) Kaynak banka bakiyesinden düşer
+    2) Hedef banka bakiyesine ekler (kur dönüşümü ile gerekirse)
+    3) virmanlar tablosuna kayıt atar
+    Returns: (basarili: bool, mesaj: str)
+    """
+    sb = get_client()
+
+    if kaynak_banka_id == hedef_banka_id:
+        return False, "Kaynak ve hedef banka aynı olamaz"
+
+    if not tutar or float(tutar) <= 0:
+        return False, "Tutar 0'dan büyük olmalı"
+
+    tutar = float(tutar)
+
+    # Bankaları al
+    try:
+        kaynak_res = sb.table("bankalar").select("*").eq("id", kaynak_banka_id).execute()
+        hedef_res = sb.table("bankalar").select("*").eq("id", hedef_banka_id).execute()
+        if not kaynak_res.data or not hedef_res.data:
+            return False, "Banka bulunamadı"
+        kaynak = kaynak_res.data[0]
+        hedef = hedef_res.data[0]
+    except Exception as e:
+        return False, f"Banka bilgisi alınamadı: {e}"
+
+    kaynak_pb = kaynak["para_birimi"]
+    hedef_pb = hedef["para_birimi"]
+
+    # Bakiye yeterli mi?
+    if float(kaynak["bakiye"]) < tutar:
+        return False, f"Yetersiz bakiye. {kaynak['hesap_adi']} hesabında {float(kaynak['bakiye']):.2f} {kaynak_pb} var"
+
+    # Hedefe gidecek tutar (kur dönüşümü)
+    hedef_tutar = tutar  # aynı para birimi ise direkt
+    if kaynak_pb != hedef_pb and kur_kullanilan:
+        kur = float(kur_kullanilan)
+        if kur <= 0:
+            return False, "Geçersiz kur"
+        if kaynak_pb == "TL" and hedef_pb == "USD":
+            hedef_tutar = tutar / kur
+        elif kaynak_pb == "USD" and hedef_pb == "TL":
+            hedef_tutar = tutar * kur
+        elif kaynak_pb == "EUR" and hedef_pb == "TL":
+            hedef_tutar = tutar * kur  # basitleştirilmiş
+        # Diğer kombinasyonlar için kullanıcı kuru manuel girer
+    elif kaynak_pb != hedef_pb:
+        return False, "Farklı para birimleri arası virman için kur gerekli"
+
+    # ─── Bakiye güncellemeleri ───
+    try:
+        yeni_kaynak_bakiye = float(kaynak["bakiye"]) - tutar
+        yeni_hedef_bakiye = float(hedef["bakiye"]) + hedef_tutar
+
+        sb.table("bankalar").update({"bakiye": yeni_kaynak_bakiye}).eq("id", kaynak_banka_id).execute()
+        sb.table("bankalar").update({"bakiye": yeni_hedef_bakiye}).eq("id", hedef_banka_id).execute()
+    except Exception as e:
+        return False, f"Bakiye güncellenemedi: {e}"
+
+    # ─── Virman kaydı ekle (varsa) ───
+    try:
+        sb.table("virmanlar").insert({
+            "kaynak_banka_id": kaynak_banka_id,
+            "hedef_banka_id": hedef_banka_id,
+            "kaynak_hesap_adi": kaynak["hesap_adi"],
+            "hedef_hesap_adi": hedef["hesap_adi"],
+            "kaynak_para_birimi": kaynak_pb,
+            "hedef_para_birimi": hedef_pb,
+            "tutar": tutar,
+            "hedef_tutar": hedef_tutar,
+            "kur_kullanilan": float(kur_kullanilan) if kur_kullanilan else None,
+            "aciklama": aciklama,
+            "tarih": date.today().isoformat(),
+        }).execute()
+    except Exception:
+        # virmanlar tablosu yoksa virman yine yapıldı, sadece kayıt tutulmadı
+        pass
+
+    return True, f"✅ {tutar:.2f} {kaynak_pb} → {hedef_tutar:.2f} {hedef_pb} virman tamamlandı"
+
+
+def virman_geri_al(virman_id):
+    """
+    Virmanı geri alır:
+    1) virman kaydını al
+    2) Hedef bankadan eklenen tutarı düş
+    3) Kaynak bankaya tutarı iade et
+    4) Virman kaydını sil
+    """
+    sb = get_client()
+
+    try:
+        v_res = sb.table("virmanlar").select("*").eq("id", virman_id).execute()
+        if not v_res.data:
+            return False, "Virman bulunamadı"
+        v = v_res.data[0]
+    except Exception as e:
+        return False, f"Virman bilgisi alınamadı: {e}"
+
+    try:
+        # Hedef banka bakiyesinden geri al
+        hedef_res = sb.table("bankalar").select("*").eq("id", v["hedef_banka_id"]).execute()
+        if hedef_res.data:
+            hedef = hedef_res.data[0]
+            yeni_hedef = float(hedef["bakiye"]) - float(v["hedef_tutar"])
+            sb.table("bankalar").update({"bakiye": yeni_hedef}).eq("id", v["hedef_banka_id"]).execute()
+
+        # Kaynak bankaya iade et
+        kaynak_res = sb.table("bankalar").select("*").eq("id", v["kaynak_banka_id"]).execute()
+        if kaynak_res.data:
+            kaynak = kaynak_res.data[0]
+            yeni_kaynak = float(kaynak["bakiye"]) + float(v["tutar"])
+            sb.table("bankalar").update({"bakiye": yeni_kaynak}).eq("id", v["kaynak_banka_id"]).execute()
+
+        # Virman kaydını sil
+        sb.table("virmanlar").delete().eq("id", virman_id).execute()
+        return True, "✅ Virman geri alındı"
+    except Exception as e:
+        return False, f"Geri alma hatası: {e}"

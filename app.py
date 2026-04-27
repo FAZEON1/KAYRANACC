@@ -14,6 +14,7 @@ from database import (
     odeme_durum_guncelle, odeme_sil, odeme_vade_guncelle, odeme_tutar_guncelle, get_hafta_ozet,
     get_bankalar, banka_ekle, banka_guncelle, banka_sil,
     get_cekler, cek_ekle_bulk, cek_sil, cek_sil_hepsi,
+    get_ertelenen_odemeler, get_virmanlar, virman_yap, virman_geri_al,
 )
 from excel_islemler import (
     excel_yukle_odeme_listesi, excel_yukle_cek_listesi,
@@ -1176,9 +1177,11 @@ with st.sidebar:
         "📊 Dashboard",
         "💳 Bu Hafta",
         "🏦 Banka Bakiyeleri",
+        "🔁 Bankalar Arası Virman",
         "💸 Nakit Akış",
         "📋 Firma Çekleri",
         "✅ Ödenenler",
+        "⏳ Ertelenen Ödemeler",
         "🕐 Geçmiş",
         "📂 Veri Yükleme",
         "📄 Raporlar",
@@ -2802,3 +2805,328 @@ elif sayfa == "🔔 Bildirim Ayarları":
                     st.success(mesaj)
                 else:
                     st.error(mesaj)
+
+
+# ════════════════════════════════════════════════════════════════════
+# 11) BANKALAR ARASI VİRMAN
+# ════════════════════════════════════════════════════════════════════
+elif sayfa == "🔁 Bankalar Arası Virman":
+    st.markdown('<div class="baslik">🔁 Bankalar Arası Virman</div>', unsafe_allow_html=True)
+    st.markdown('<div class="alt-baslik">Hesaplar arasında para transferi</div>', unsafe_allow_html=True)
+
+    bankalar = get_bankalar()
+    kur = get_kur()
+
+    if len(bankalar) < 2:
+        st.warning("⚠️ Virman için en az 2 banka hesabınız olmalı. Önce 'Banka Bakiyeleri' sayfasından hesap ekleyin.")
+        st.stop()
+
+    # ─── Yeni Virman Formu ───
+    st.markdown("### ➕ Yeni Virman")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("**Kaynak Hesap**")
+        kaynak_options = {f"{b['hesap_adi']} ({b['para_birimi']}) — Bakiye: {float(b['bakiye']):,.2f}": b['id'] for b in bankalar}
+        kaynak_secim = st.selectbox("Kaynak", list(kaynak_options.keys()), key="virman_kaynak")
+        kaynak_id = kaynak_options[kaynak_secim]
+        kaynak_banka = next(b for b in bankalar if b['id'] == kaynak_id)
+
+    with col2:
+        st.markdown("**Hedef Hesap**")
+        hedef_options = {f"{b['hesap_adi']} ({b['para_birimi']}) — Bakiye: {float(b['bakiye']):,.2f}": b['id']
+                         for b in bankalar if b['id'] != kaynak_id}
+        if not hedef_options:
+            st.warning("Başka hesap yok.")
+            st.stop()
+        hedef_secim = st.selectbox("Hedef", list(hedef_options.keys()), key="virman_hedef")
+        hedef_id = hedef_options[hedef_secim]
+        hedef_banka = next(b for b in bankalar if b['id'] == hedef_id)
+
+    # Para birimi farklılığı uyarısı + kur input
+    farkli_pb = kaynak_banka['para_birimi'] != hedef_banka['para_birimi']
+
+    col_t, col_k = st.columns([2, 1])
+    with col_t:
+        kaynak_bakiye_val = float(kaynak_banka.get('bakiye') or 0)
+        tutar = st.number_input(
+            f"Tutar ({kaynak_banka['para_birimi']})",
+            min_value=0.0,
+            max_value=max(kaynak_bakiye_val, 0.01),  # 0 ise input'u kullanılabilir tut
+            step=0.01,
+            format="%.2f",
+            key="virman_tutar",
+            disabled=(kaynak_bakiye_val <= 0)
+        )
+        if kaynak_bakiye_val <= 0:
+            st.caption("⚠️ Bu hesabın bakiyesi 0 veya negatif. Virman yapılamaz.")
+    with col_k:
+        if farkli_pb:
+            kullanilan_kur = st.number_input(
+                f"Kur ({kaynak_banka['para_birimi']}/{hedef_banka['para_birimi']})",
+                value=float(kur),
+                min_value=0.01,
+                step=0.01,
+                format="%.2f",
+                key="virman_kur",
+                help=f"1 USD = {kur} TL kullanılıyor"
+            )
+        else:
+            kullanilan_kur = None
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.caption("Aynı para birimi, kur gerekmez")
+
+    # Hedefe gidecek hesaplanmış tutar (önizleme)
+    if farkli_pb and kullanilan_kur and tutar > 0:
+        if kaynak_banka['para_birimi'] == "TL" and hedef_banka['para_birimi'] == "USD":
+            hedef_tutar_onizleme = tutar / kullanilan_kur
+        elif kaynak_banka['para_birimi'] == "USD" and hedef_banka['para_birimi'] == "TL":
+            hedef_tutar_onizleme = tutar * kullanilan_kur
+        else:
+            hedef_tutar_onizleme = tutar
+        st.info(f"➡️ Hedef hesaba **{hedef_tutar_onizleme:,.2f} {hedef_banka['para_birimi']}** eklenecek (Kur: {kullanilan_kur})")
+    elif tutar > 0:
+        st.info(f"➡️ Hedef hesaba **{tutar:,.2f} {hedef_banka['para_birimi']}** eklenecek")
+
+    aciklama = st.text_input("Açıklama (opsiyonel)", placeholder="Örn: Maaş ödemeleri için TL transferi", key="virman_aciklama")
+
+    if st.button("🔁 Virmanı Yap", type="primary", use_container_width=True):
+        if tutar <= 0:
+            st.error("Tutar 0'dan büyük olmalı.")
+        elif tutar > kaynak_bakiye_val:
+            st.error(f"Yetersiz bakiye! Maksimum: {kaynak_bakiye_val:,.2f} {kaynak_banka['para_birimi']}")
+        else:
+            with st.spinner("İşleniyor..."):
+                basarili, mesaj = virman_yap(kaynak_id, hedef_id, tutar, aciklama, kullanilan_kur)
+            if basarili:
+                st.success(mesaj)
+                st.balloons()
+                st.rerun()
+            else:
+                st.error(f"❌ {mesaj}")
+
+    st.markdown("---")
+
+    # ─── Geçmiş Virmanlar ───
+    st.markdown("### 📜 Son Virmanlar")
+    virmanlar = get_virmanlar(limit=30)
+
+    if not virmanlar:
+        st.info("Henüz virman kaydı yok.")
+    else:
+        for v in virmanlar:
+            kaynak_pb = v.get('kaynak_para_birimi') or 'TL'
+            hedef_pb = v.get('hedef_para_birimi') or 'TL'
+            kaynak_sym = "$" if kaynak_pb == "USD" else "₺"
+            hedef_sym = "$" if hedef_pb == "USD" else "₺"
+
+            # Float dönüşümleri (string olabilir)
+            try:
+                v_tutar = float(v.get('tutar') or 0)
+            except (TypeError, ValueError):
+                v_tutar = 0.0
+            try:
+                v_hedef_tutar = float(v.get('hedef_tutar') or 0)
+            except (TypeError, ValueError):
+                v_hedef_tutar = 0.0
+            v_kur = v.get('kur_kullanilan')
+            try:
+                v_kur_float = float(v_kur) if v_kur else None
+            except (TypeError, ValueError):
+                v_kur_float = None
+
+            col_a, col_b = st.columns([8, 1])
+            with col_a:
+                kur_str = f" • Kur: {v_kur_float:.2f}" if v_kur_float else ""
+                tarih_str = v.get('tarih', '')
+                aciklama_str = f"<br><small style='color:#94A3B8'>📝 {v.get('aciklama')}</small>" if v.get('aciklama') else ""
+
+                st.markdown(f"""
+                <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:12px 16px;margin-bottom:8px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <div>
+                            <span style="font-size:13px;font-weight:700;color:#0F172A">{v.get('kaynak_hesap_adi','?')}</span>
+                            <span style="margin:0 10px;color:#94A3B8;font-size:14px">→</span>
+                            <span style="font-size:13px;font-weight:700;color:#0F172A">{v.get('hedef_hesap_adi','?')}</span>
+                        </div>
+                        <div style="text-align:right">
+                            <span style="font-family:monospace;color:#DC2626;font-weight:600">-{kaynak_sym}{v_tutar:,.2f}</span>
+                            &nbsp;&nbsp;
+                            <span style="font-family:monospace;color:#16A34A;font-weight:600">+{hedef_sym}{v_hedef_tutar:,.2f}</span>
+                        </div>
+                    </div>
+                    <div style="font-size:11px;color:#64748B;margin-top:4px">
+                        🗓️ {tarih_str}{kur_str}
+                        {aciklama_str}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col_b:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("↩️", key=f"virman_geri_{v['id']}", help="Bu virmanı geri al"):
+                    basarili, mesaj = virman_geri_al(v['id'])
+                    if basarili:
+                        st.success(mesaj)
+                        st.rerun()
+                    else:
+                        st.error(mesaj)
+
+
+# ════════════════════════════════════════════════════════════════════
+# 12) ERTELENEN ÖDEMELER
+# ════════════════════════════════════════════════════════════════════
+elif sayfa == "⏳ Ertelenen Ödemeler":
+    st.markdown('<div class="baslik">⏳ Ertelenen Ödemeler</div>', unsafe_allow_html=True)
+    st.markdown('<div class="alt-baslik">Vade tarihi değiştirilmiş ödemeler</div>', unsafe_allow_html=True)
+
+    ertelenenler = get_ertelenen_odemeler()
+
+    if not ertelenenler:
+        st.info("📭 Henüz ertelenmiş ödeme yok. **'Bu Hafta'** sayfasından bir ödemenin **'📅 Vadeyi Ötele'** kutusuyla vade değiştirebilirsin.")
+        st.markdown("""
+        <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:14px 18px;margin-top:16px;">
+            <div style="font-size:13px;color:#78350F;font-weight:600;margin-bottom:6px">💡 Bilgilendirme</div>
+            <div style="font-size:12px;color:#92400E;line-height:1.5">
+                Bu özelliğin tam çalışması için Supabase'de <code>orijinal_vade</code>, <code>ertelendi_sayisi</code> ve
+                <code>son_erteleme_tarih</code> kolonlarının olması gerekir. Sayfanın sonundaki SQL'i Supabase'de çalıştırın.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        # Özet metrikler — float dönüşümü güvenli
+        def _f(v):
+            try:
+                return float(v) if v else 0.0
+            except (TypeError, ValueError):
+                return 0.0
+        toplam_tl = sum(_f(o.get("tutar_tl")) for o in ertelenenler)
+        toplam_usd = sum(_f(o.get("tutar_usd")) for o in ertelenenler)
+        toplam_erteleme = sum(int(o.get("ertelendi_sayisi") or 0) for o in ertelenenler)
+        bekleyen_cnt = sum(1 for o in ertelenenler if o["durum"] == "bekliyor")
+
+        ozet_html = (
+            '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">'
+            '<div style="background:#FEF3C7;border-radius:12px;padding:16px 18px;border:1px solid #FDE68A;border-top:3px solid #F59E0B;text-align:center">'
+            '<div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#92400E;margin-bottom:8px">Ertelenen Adet</div>'
+            f'<div style="font-size:24px;font-weight:700;color:#78350F;font-family:monospace">{len(ertelenenler)}</div>'
+            f'<div style="font-size:11px;margin-top:5px;color:#B45309">{bekleyen_cnt} bekliyor</div>'
+            '</div>'
+            '<div style="background:#FEE2E2;border-radius:12px;padding:16px 18px;border:1px solid #FCA5A5;border-top:3px solid #DC2626;text-align:center">'
+            '<div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#991B1B;margin-bottom:8px">Toplam Erteleme</div>'
+            f'<div style="font-size:24px;font-weight:700;color:#7F1D1D;font-family:monospace">{toplam_erteleme}</div>'
+            '<div style="font-size:11px;margin-top:5px;color:#B91C1C">kez ötelendi</div>'
+            '</div>'
+            '<div style="background:#F0F9FF;border-radius:12px;padding:16px 18px;border:1px solid #BAE6FD;border-top:3px solid #0284C7;text-align:center">'
+            '<div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#0369A1;margin-bottom:8px">Toplam TL</div>'
+            f'<div style="font-size:24px;font-weight:700;color:#075985;font-family:monospace">₺{fmt(toplam_tl)}</div>'
+            '</div>'
+            '<div style="background:#FDF4FF;border-radius:12px;padding:16px 18px;border:1px solid #E9D5FF;border-top:3px solid #9333EA;text-align:center">'
+            '<div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#7E22CE;margin-bottom:8px">Toplam USD</div>'
+            f'<div style="font-size:24px;font-weight:700;color:#6B21A8;font-family:monospace">${fmt(toplam_usd)}</div>'
+            '</div>'
+            '</div>'
+        )
+        st.markdown(ozet_html, unsafe_allow_html=True)
+
+        # Filtre
+        col_f1, col_f2 = st.columns([3, 1])
+        with col_f1:
+            arama = st.text_input("🔍 Firma adı veya açıklama ara", key="ertelenen_arama")
+        with col_f2:
+            durum_filt = st.selectbox("Durum", ["Tümü", "Bekleyen", "Ödenen"], key="ertelenen_durum")
+
+        filtrelenmis = ertelenenler
+        if arama:
+            a = arama.lower()
+            filtrelenmis = [o for o in filtrelenmis if a in str(o.get("firma","")).lower() or a in str(o.get("aciklama","")).lower()]
+        if durum_filt == "Bekleyen":
+            filtrelenmis = [o for o in filtrelenmis if o["durum"] == "bekliyor"]
+        elif durum_filt == "Ödenen":
+            filtrelenmis = [o for o in filtrelenmis if o["durum"] == "odendi"]
+
+        st.markdown(f"**{len(filtrelenmis)}** ödeme gösteriliyor")
+        st.markdown("")
+
+        # En çok ertelenenlere göre sırala
+        filtrelenmis = sorted(filtrelenmis, key=lambda o: -(o.get("ertelendi_sayisi") or 0))
+
+        for o in filtrelenmis:
+            kat = o.get("kategori") or "diger"
+            kat_info = KATEGORILER.get(kat, KATEGORILER["diger"])
+            is_odendi = o["durum"] == "odendi"
+
+            # Vade farkı hesapla
+            try:
+                orjinal = pd.to_datetime(o.get("orijinal_vade")).date()
+                yeni = pd.to_datetime(o.get("vade")).date()
+                fark_gun = (yeni - orjinal).days
+                fark_str = f"+{fark_gun} gün ileri" if fark_gun > 0 else f"{fark_gun} gün"
+                orjinal_str = orjinal.strftime("%d.%m.%Y")
+                yeni_str = yeni.strftime("%d.%m.%Y")
+            except Exception:
+                fark_str = "?"
+                orjinal_str = "?"
+                yeni_str = fmt_tarih(o.get("vade"))
+
+            erteleme_sayisi = o.get("ertelendi_sayisi") or 1
+            son_erteleme = o.get("son_erteleme_tarih") or ""
+
+            tutar_str = ""
+            if o.get("tutar_tl"):
+                tutar_str = f"<span style='color:#065F46;font-weight:700;font-family:monospace'>₺{fmt(o['tutar_tl'])}</span>"
+            elif o.get("tutar_usd"):
+                tutar_str = f"<span style='color:#1E40AF;font-weight:700;font-family:monospace'>${fmt(o['tutar_usd'])}</span>"
+
+            durum_badge = (
+                '<span style="background:#DCFCE7;color:#166534;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700">✅ Ödendi</span>'
+                if is_odendi else
+                '<span style="background:#FEF3C7;color:#92400E;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700">⏳ Bekliyor</span>'
+            )
+
+            opacity = "0.5" if is_odendi else "1"
+
+            st.markdown(f"""
+            <div style="background:white;border-left:4px solid {kat_info['renk']};border:1px solid #E2E8F0;border-radius:10px;padding:14px 18px;margin-bottom:10px;opacity:{opacity}">
+                <div style="display:grid;grid-template-columns:2.5fr 1.5fr 1.5fr 1fr 1fr;gap:14px;align-items:center">
+                    <div>
+                        <div style="font-size:14px;font-weight:700;color:#0F172A">{o['firma']}</div>
+                        <div style="font-size:11px;color:#64748B;margin-top:2px">{o.get('aciklama') or ''}</div>
+                        <span style="background:{kat_info['renk']};color:white;font-size:10px;padding:1px 8px;border-radius:8px;font-weight:600;margin-top:6px;display:inline-block">{kat_info['label']}</span>
+                    </div>
+                    <div>
+                        <div style="font-size:10px;color:#94A3B8;font-weight:600;letter-spacing:.3px">ORİJİNAL VADE</div>
+                        <div style="font-size:13px;color:#475569;font-weight:600;text-decoration:line-through;font-family:monospace">{orjinal_str}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:10px;color:#94A3B8;font-weight:600;letter-spacing:.3px">YENİ VADE</div>
+                        <div style="font-size:13px;color:#0F172A;font-weight:700;font-family:monospace">{yeni_str}</div>
+                        <div style="font-size:10px;color:#DC2626;font-weight:600">{fark_str}</div>
+                    </div>
+                    <div style="text-align:center">
+                        <div style="background:#FEE2E2;color:#991B1B;border-radius:8px;padding:6px 10px;font-size:18px;font-weight:700;font-family:monospace">{erteleme_sayisi}x</div>
+                        <div style="font-size:10px;color:#94A3B8;margin-top:2px">erteleme</div>
+                    </div>
+                    <div style="text-align:right">
+                        <div>{tutar_str}</div>
+                        <div style="margin-top:6px">{durum_badge}</div>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # SQL bilgisi
+        with st.expander("ℹ️ Bu sayfa nasıl çalışır?"):
+            st.markdown("""
+            Bir ödemenin vadesini **'Bu Hafta'** sayfasında değiştirdiğinizde:
+            - Orijinal vade **otomatik** olarak kaydedilir
+            - **Erteleme sayacı** her değişiklikte +1 artar
+            - Bu sayfada **en çok ertelenenden** en aza sıralı görünür
+
+            Tam çalışması için Supabase'de bu kolonların olması gerekir:
+            ```sql
+            ALTER TABLE odemeler ADD COLUMN IF NOT EXISTS orijinal_vade DATE;
+            ALTER TABLE odemeler ADD COLUMN IF NOT EXISTS ertelendi_sayisi INTEGER DEFAULT 0;
+            ALTER TABLE odemeler ADD COLUMN IF NOT EXISTS son_erteleme_tarih DATE;
+            ```
+            """)
