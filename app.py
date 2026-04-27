@@ -1013,6 +1013,50 @@ def tomorrow_iso():
     return (date.today() + timedelta(days=1)).isoformat()
 
 
+def kayit_erteleme(odeme, eski_vade, yeni_vade):
+    """
+    Ertelemeyi session_state'te takip eder. Supabase kolonu gerekmez.
+    Sayfa yenilense bile session içinde kalır, kapatınca silinir.
+    """
+    if "ertelemeler" not in st.session_state:
+        st.session_state.ertelemeler = {}  # {odeme_id: {orijinal_vade, son_vade, sayi, son_tarih}}
+
+    odeme_id = odeme["id"]
+    eski_str = str(eski_vade)[:10] if eski_vade else None
+    yeni_str = str(yeni_vade)[:10] if yeni_vade else None
+
+    # Aynı tarih ise tracking yapma
+    if eski_str == yeni_str:
+        return
+
+    if odeme_id not in st.session_state.ertelemeler:
+        # İlk erteleme — orijinal vadeyi kaydet
+        st.session_state.ertelemeler[odeme_id] = {
+            "odeme_id": odeme_id,
+            "firma": odeme.get("firma", ""),
+            "aciklama": odeme.get("aciklama", ""),
+            "kategori": odeme.get("kategori") or "diger",
+            "tutar_tl": odeme.get("tutar_tl"),
+            "tutar_usd": odeme.get("tutar_usd"),
+            "orijinal_vade": eski_str,
+            "son_vade": yeni_str,
+            "sayi": 1,
+            "son_tarih": date.today().isoformat(),
+        }
+    else:
+        # Tekrar erteleme — sayıyı artır, son_vade'yi güncelle
+        kayit = st.session_state.ertelemeler[odeme_id]
+        kayit["son_vade"] = yeni_str
+        kayit["sayi"] = kayit.get("sayi", 1) + 1
+        kayit["son_tarih"] = date.today().isoformat()
+        # Tutar/firma değişmiş olabilir, güncelle
+        kayit["firma"] = odeme.get("firma", kayit.get("firma", ""))
+        kayit["aciklama"] = odeme.get("aciklama", kayit.get("aciklama", ""))
+        kayit["kategori"] = odeme.get("kategori") or kayit.get("kategori") or "diger"
+        kayit["tutar_tl"] = odeme.get("tutar_tl")
+        kayit["tutar_usd"] = odeme.get("tutar_usd")
+
+
 def get_kur():
     """
     USD/TL kurunu döndürür.
@@ -1178,6 +1222,7 @@ with st.sidebar:
         "💳 Bu Hafta",
         "🏦 Banka Bakiyeleri",
         "🔁 Bankalar Arası Virman",
+        "💰 Toplam Aktifler",
         "💸 Nakit Akış",
         "📋 Firma Çekleri",
         "✅ Ödenenler",
@@ -1890,6 +1935,7 @@ elif sayfa == "💳 Bu Hafta":
                             )
                         with col_kaydet:
                             if st.button("💾 Ötele", key=f"vade_save_{o['id']}", type="primary", use_container_width=True):
+                                kayit_erteleme(o, mevcut_vade, yeni_vade)
                                 odeme_vade_guncelle(o["id"], yeni_vade)
                                 st.success(f"Vade {yeni_vade.strftime('%d.%m.%Y')} olarak güncellendi.")
                                 st.rerun()
@@ -1898,19 +1944,27 @@ elif sayfa == "💳 Bu Hafta":
                         col_h1, col_h2, col_h3, col_h4 = st.columns(4)
                         with col_h1:
                             if st.button("+1 gün", key=f"v1_{o['id']}", use_container_width=True):
-                                odeme_vade_guncelle(o["id"], mevcut_vade + timedelta(days=1))
+                                yeni_t = mevcut_vade + timedelta(days=1)
+                                kayit_erteleme(o, mevcut_vade, yeni_t)
+                                odeme_vade_guncelle(o["id"], yeni_t)
                                 st.rerun()
                         with col_h2:
                             if st.button("+3 gün", key=f"v3_{o['id']}", use_container_width=True):
-                                odeme_vade_guncelle(o["id"], mevcut_vade + timedelta(days=3))
+                                yeni_t = mevcut_vade + timedelta(days=3)
+                                kayit_erteleme(o, mevcut_vade, yeni_t)
+                                odeme_vade_guncelle(o["id"], yeni_t)
                                 st.rerun()
                         with col_h3:
                             if st.button("+7 gün", key=f"v7_{o['id']}", use_container_width=True):
-                                odeme_vade_guncelle(o["id"], mevcut_vade + timedelta(days=7))
+                                yeni_t = mevcut_vade + timedelta(days=7)
+                                kayit_erteleme(o, mevcut_vade, yeni_t)
+                                odeme_vade_guncelle(o["id"], yeni_t)
                                 st.rerun()
                         with col_h4:
                             if st.button("+30 gün", key=f"v30_{o['id']}", use_container_width=True):
-                                odeme_vade_guncelle(o["id"], mevcut_vade + timedelta(days=30))
+                                yeni_t = mevcut_vade + timedelta(days=30)
+                                kayit_erteleme(o, mevcut_vade, yeni_t)
+                                odeme_vade_guncelle(o["id"], yeni_t)
                                 st.rerun()
                         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -2978,45 +3032,51 @@ elif sayfa == "🔁 Bankalar Arası Virman":
 # ════════════════════════════════════════════════════════════════════
 elif sayfa == "⏳ Ertelenen Ödemeler":
     st.markdown('<div class="baslik">⏳ Ertelenen Ödemeler</div>', unsafe_allow_html=True)
-    st.markdown('<div class="alt-baslik">Vade tarihi değiştirilmiş ödemeler</div>', unsafe_allow_html=True)
+    st.markdown('<div class="alt-baslik">Bu oturumda vadesi değiştirilmiş ödemeler</div>', unsafe_allow_html=True)
 
-    # ─── Tanı: Supabase'de kolonlar var mı kontrol et ───
-    sb_test = None
-    try:
-        from database import get_client
-        sb_test = get_client()
-        # Test et: ertelendi_sayisi var mı?
-        test_res = sb_test.table("odemeler").select("id, ertelendi_sayisi, orijinal_vade").limit(1).execute()
-        kolonlar_var = True
-    except Exception as e:
-        kolonlar_var = False
+    # ─── Session state'ten ertelemeleri al ───
+    ertelemeler_dict = st.session_state.get("ertelemeler", {})
 
-    if not kolonlar_var:
-        st.error("❌ **Supabase tablonuzda gerekli kolonlar yok!**")
-        st.markdown("""
-        <div style="background:#FEF3C7;border:2px solid #F59E0B;border-radius:12px;padding:18px 22px;margin:12px 0">
-            <div style="font-size:14px;color:#78350F;font-weight:700;margin-bottom:10px">
-                📋 Ertelenenleri görebilmek için Supabase'de 3 kolon eklenmeli
-            </div>
-            <div style="font-size:13px;color:#92400E;line-height:1.6">
-                <b>1.</b> <a href="https://supabase.com/dashboard" target="_blank" style="color:#1E40AF;font-weight:600">supabase.com/dashboard</a> 'a git<br>
-                <b>2.</b> Projen <code>qspwlqegoeudifxxrxcj</code> 'yi aç<br>
-                <b>3.</b> Sol menüden <b>SQL Editor</b> → <b>New Query</b><br>
-                <b>4.</b> Aşağıdaki kodu yapıştır → <b>RUN</b> butonuna bas<br>
-                <b>5.</b> Bu sayfayı yenile
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+    # Mevcut ödemelerle eşleştir (silinmiş veya ödenmiş olabilir)
+    odemeler_aktif, _ = get_aktif_odemeler()
+    odeme_lookup = {o["id"]: o for o in odemeler_aktif}
 
-        st.code("""ALTER TABLE odemeler ADD COLUMN IF NOT EXISTS orijinal_vade DATE;
-ALTER TABLE odemeler ADD COLUMN IF NOT EXISTS ertelendi_sayisi INTEGER DEFAULT 0;
-ALTER TABLE odemeler ADD COLUMN IF NOT EXISTS son_erteleme_tarih DATE;""", language="sql")
+    # Ertelenenler listesini oluştur — güncel ödeme verisi ile birleştir
+    ertelenenler = []
+    for odeme_id, kayit in ertelemeler_dict.items():
+        guncel = odeme_lookup.get(odeme_id)
+        if guncel:
+            # Mevcut ödeme bulundu — durum bilgisini al
+            ertelenenler.append({
+                "id": odeme_id,
+                "firma": guncel.get("firma") or kayit.get("firma", ""),
+                "aciklama": guncel.get("aciklama") or kayit.get("aciklama", ""),
+                "kategori": guncel.get("kategori") or kayit.get("kategori") or "diger",
+                "tutar_tl": guncel.get("tutar_tl"),
+                "tutar_usd": guncel.get("tutar_usd"),
+                "vade": guncel.get("vade"),
+                "durum": guncel.get("durum", "bekliyor"),
+                "orijinal_vade": kayit.get("orijinal_vade"),
+                "ertelendi_sayisi": kayit.get("sayi", 1),
+                "son_erteleme_tarih": kayit.get("son_tarih"),
+            })
 
-        st.info("Bu komutlar **mevcut verilerinize ZARAR VERMEZ** — sadece 3 yeni boş kolon ekler. Tek seferlik bir işlemdir.")
-        st.stop()
+    # Üstte temizleme butonu
+    col_baslik, col_temizle = st.columns([5, 1])
+    with col_temizle:
+        if ertelenenler:
+            if st.button("🗑️ Geçmişi Temizle", help="Erteleme kayıtlarını sıfırla", use_container_width=True):
+                st.session_state.ertelemeler = {}
+                st.success("Erteleme geçmişi temizlendi.")
+                st.rerun()
 
-    # ─── Kolonlar var, şimdi ertelenenleri al ───
-    ertelenenler = get_ertelenen_odemeler()
+    # Bilgi notu
+    st.markdown("""
+    <div style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:8px;padding:8px 14px;margin:10px 0;font-size:11px;color:#075985">
+        ℹ️ Erteleme kayıtları bu oturumda tutulur. Tarayıcıyı kapatınca veya çıkış yapınca geçmiş silinir.
+        Kalıcı kayıt için Supabase'e 3 kolon eklenmesi gerekir (opsiyonel).
+    </div>
+    """, unsafe_allow_html=True)
 
     if not ertelenenler:
         st.info("📭 Henüz ertelenmiş ödeme yok.")
@@ -3150,18 +3210,383 @@ ALTER TABLE odemeler ADD COLUMN IF NOT EXISTS son_erteleme_tarih DATE;""", langu
             </div>
             """, unsafe_allow_html=True)
 
-        # SQL bilgisi
-        with st.expander("ℹ️ Bu sayfa nasıl çalışır?"):
+        # Kalıcı kayıt için bilgilendirme
+        with st.expander("💡 Erteleme geçmişini kalıcı yapmak ister misiniz? (opsiyonel)"):
             st.markdown("""
-            Bir ödemenin vadesini **'Bu Hafta'** sayfasında değiştirdiğinizde:
-            - Orijinal vade **otomatik** olarak kaydedilir
-            - **Erteleme sayacı** her değişiklikte +1 artar
-            - Bu sayfada **en çok ertelenenden** en aza sıralı görünür
+            Bu sayfa şu an **oturum bazlı** çalışıyor — tarayıcıyı kapatınca erteleme geçmişi kaybolur.
 
-            Tam çalışması için Supabase'de bu kolonların olması gerekir:
-            ```sql
-            ALTER TABLE odemeler ADD COLUMN IF NOT EXISTS orijinal_vade DATE;
-            ALTER TABLE odemeler ADD COLUMN IF NOT EXISTS ertelendi_sayisi INTEGER DEFAULT 0;
-            ALTER TABLE odemeler ADD COLUMN IF NOT EXISTS son_erteleme_tarih DATE;
-            ```
+            Kalıcı kayıt için Supabase SQL Editor'de bu komutları çalıştırın:
             """)
+            st.code("""ALTER TABLE odemeler ADD COLUMN IF NOT EXISTS orijinal_vade DATE;
+ALTER TABLE odemeler ADD COLUMN IF NOT EXISTS ertelendi_sayisi INTEGER DEFAULT 0;
+ALTER TABLE odemeler ADD COLUMN IF NOT EXISTS son_erteleme_tarih DATE;""", language="sql")
+            st.caption("Bu opsiyoneldir, mevcut özellik onsuz da çalışır.")
+
+
+# ════════════════════════════════════════════════════════════════════
+# 13) TOPLAM AKTİFLER
+# ════════════════════════════════════════════════════════════════════
+elif sayfa == "💰 Toplam Aktifler":
+    st.markdown('<div class="baslik">💰 Toplam Aktifler</div>', unsafe_allow_html=True)
+    st.markdown('<div class="alt-baslik">Stok + Pazaryeri + Yoldaki Mal + Banka − Borçlar (USD)</div>', unsafe_allow_html=True)
+
+    kur = get_kur()
+
+    # ─── Yardımcı: Excel parse fonksiyonları ───
+    def parse_stok_excel(file_bytes):
+        """
+        Stok Excel'inden değerleri çıkar.
+        ÖNEMLİ: Excel'in son satırlarında zaten toplam satırı var. Onu kullan.
+        Yoksa elle topla ama "TOPLAM" satırlarını atla.
+        """
+        import pandas as pd
+        from io import BytesIO
+        df = pd.read_excel(BytesIO(file_bytes), header=None)
+
+        # ─── Sütun 4 = USD SON DURUM STOK DEĞERİ ───
+        # Önce alt taraftaki TOPLAM satırını bul (genelde son ~3 satırda)
+        usd_stok = 0.0
+        toplam_bulundu = False
+        for i in range(len(df) - 1, max(2, len(df) - 10), -1):
+            v = df.iloc[i, 4]
+            if pd.notna(v):
+                try:
+                    val = float(v)
+                    # Toplam satırı genelde stok kodu boş ama büyük tutar var
+                    stok_kodu = df.iloc[i, 0]
+                    if pd.isna(stok_kodu) or str(stok_kodu).strip() == "" or "TOPLAM" in str(stok_kodu).upper():
+                        usd_stok = val
+                        toplam_bulundu = True
+                        break
+                except (ValueError, TypeError):
+                    continue
+
+        # Toplam yoksa elle topla (header'ları atla, son toplam satırlarını da atla)
+        if not toplam_bulundu:
+            for i in range(2, len(df)):
+                stok_kodu = df.iloc[i, 0]
+                if pd.isna(stok_kodu) or str(stok_kodu).strip() == "":
+                    continue  # boş satır = muhtemel toplam
+                if "TOPLAM" in str(stok_kodu).upper():
+                    continue
+                v = df.iloc[i, 4]
+                if pd.notna(v):
+                    try:
+                        usd_stok += float(v)
+                    except (ValueError, TypeError):
+                        pass
+
+        # ─── Pazaryeri firmaları: "TOPLAM TUTAR" sütunlarını bul ───
+        pazaryerleri = {}  # {firma_adi: toplam_tutar}
+        try:
+            for col_idx in range(df.shape[1]):
+                header = df.iloc[1, col_idx]
+                if pd.notna(header) and isinstance(header, str) and "TOPLAM TUTAR" in header.upper():
+                    # Bu sütun TOPLAM TUTAR — firma adı için geriye doğru git
+                    # "STOK", "SATIŞ", "FIYAT", "FİYAT", "MİKT", "ADET", "İADE" geçmeyen ilk hücre = firma adı
+                    firma_adi = "Bilinmeyen"
+                    blacklist = ["STOK", "SATIŞ", "FIYAT", "FİYAT", "MIKT", "MİKT", "ADET", "İADE", "TOPLAM"]
+                    for back in range(1, 5):  # 1-4 geriye bak
+                        check_col = col_idx - back
+                        if check_col < 0:
+                            break
+                        candidate = df.iloc[1, check_col]
+                        if pd.notna(candidate) and isinstance(candidate, str):
+                            cand_str = candidate.strip()
+                            cand_upper = cand_str.upper()
+                            # Firma adı ise (blacklist'te yok ve uzunluk yeterli)
+                            if cand_str and not any(bl in cand_upper for bl in blacklist):
+                                firma_adi = cand_str
+                                break
+
+                    # Bu sütundaki tüm değerleri topla (header'lar 0,1; veriler 2'den)
+                    toplam = 0.0
+                    for i in range(2, len(df)):
+                        v = df.iloc[i, col_idx]
+                        if pd.notna(v):
+                            try:
+                                toplam += float(v)
+                            except (ValueError, TypeError):
+                                pass
+                    if firma_adi and firma_adi != "Bilinmeyen":
+                        pazaryerleri[firma_adi] = toplam
+        except Exception:
+            pass
+
+        return usd_stok, pazaryerleri
+
+    def parse_ithalat_excel(file_bytes):
+        """
+        İthalat Excel'inden 'Ödenen / USD' toplamını al.
+        Sütun yapısı:
+        0=Durum, 1=Üretici, 2=PI No, 3=Ürünler, 4=Tahmini Varış, 5=Invoice/USD,
+        6=ÖDENEN/USD ← BU, 7=Kalan/USD, 8=Vergi/TL, 9=Vergi/USD, ...
+        """
+        import pandas as pd
+        from io import BytesIO
+        df = pd.read_excel(BytesIO(file_bytes), header=None)
+
+        # TOPLAM satırını bul (sütun 0'da "TOPLAM" yazar)
+        for i in range(len(df)):
+            ilk = df.iloc[i, 0]
+            if pd.notna(ilk) and "TOPLAM" in str(ilk).upper():
+                v = df.iloc[i, 6]  # ÖDENEN sütunu = 6
+                if pd.notna(v):
+                    try:
+                        return float(v)
+                    except (ValueError, TypeError):
+                        pass
+
+        # TOPLAM yoksa elle topla (header satırları 0,1,2'yi atla)
+        odenen = 0.0
+        for i in range(3, len(df)):
+            v = df.iloc[i, 6]
+            if pd.notna(v):
+                try:
+                    odenen += float(v)
+                except (ValueError, TypeError):
+                    pass
+        return odenen
+
+    def parse_cari_excel(file_bytes):
+        """
+        Cari alacaklar Excel'inden borçları çıkar.
+        Sütun yapısı: 0=Tip, 1=Kod, 2=Hesap adı, 3=Döviz, 4=Borç, 5=Alacak, 6=Bakiye
+        Negatif bakiye = SEN borçlusun.
+        """
+        import pandas as pd
+        from io import BytesIO
+        df = pd.read_excel(BytesIO(file_bytes), header=None)
+
+        usd_borc = 0.0
+        tl_borc = 0.0
+        eur_borc = 0.0
+        for i in range(1, len(df)):
+            tip = df.iloc[i, 0]
+            doviz = df.iloc[i, 3]
+            bakiye = df.iloc[i, 6]
+            if pd.notna(tip) and pd.notna(bakiye) and pd.notna(doviz):
+                try:
+                    bakiye_val = float(bakiye)
+                    if bakiye_val < 0:
+                        d = str(doviz).strip().upper()
+                        if d == "USD":
+                            usd_borc += abs(bakiye_val)
+                        elif d == "TL":
+                            tl_borc += abs(bakiye_val)
+                        elif d == "EUR":
+                            eur_borc += abs(bakiye_val)
+                except (ValueError, TypeError):
+                    pass
+        return usd_borc, tl_borc, eur_borc
+
+    # ─── Session state'te dosyaları sakla ───
+    if "aktif_stok_data" not in st.session_state:
+        st.session_state.aktif_stok_data = None
+    if "aktif_ithalat_data" not in st.session_state:
+        st.session_state.aktif_ithalat_data = None
+    if "aktif_cari_data" not in st.session_state:
+        st.session_state.aktif_cari_data = None
+
+    # ─── Excel yükleme bölümü ───
+    st.markdown("### 📤 Excel Dosyalarını Yükle")
+    st.markdown(
+        '<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#1E3A8A">'
+        '💡 Bu sayfada yüklenen dosyalar <b>diğer sayfalarla karışmaz</b>. Sadece toplam aktif hesaplamasında kullanılır.'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown("**1️⃣ Stok Değeri Raporu**")
+        stok_file = st.file_uploader("Stok Excel", type=["xls", "xlsx"], key="aktif_stok_upload", label_visibility="collapsed")
+        if stok_file:
+            try:
+                st.session_state.aktif_stok_data = parse_stok_excel(stok_file.read())
+                st.success(f"✅ {stok_file.name}")
+            except Exception as e:
+                st.error(f"❌ Hata: {e}")
+                st.session_state.aktif_stok_data = None
+
+    with col2:
+        st.markdown("**2️⃣ İthalat Ödeme Takip**")
+        ithalat_file = st.file_uploader("İthalat Excel", type=["xls", "xlsx"], key="aktif_ithalat_upload", label_visibility="collapsed")
+        if ithalat_file:
+            try:
+                st.session_state.aktif_ithalat_data = parse_ithalat_excel(ithalat_file.read())
+                st.success(f"✅ {ithalat_file.name}")
+            except Exception as e:
+                st.error(f"❌ Hata: {e}")
+                st.session_state.aktif_ithalat_data = None
+
+    with col3:
+        st.markdown("**3️⃣ Cari Alacaklar Listesi**")
+        cari_file = st.file_uploader("Cari Excel", type=["xls", "xlsx"], key="aktif_cari_upload", label_visibility="collapsed")
+        if cari_file:
+            try:
+                st.session_state.aktif_cari_data = parse_cari_excel(cari_file.read())
+                st.success(f"✅ {cari_file.name}")
+            except Exception as e:
+                st.error(f"❌ Hata: {e}")
+                st.session_state.aktif_cari_data = None
+
+    st.markdown("---")
+
+    # ─── Hesaplama ───
+    bankalar = get_bankalar()
+    banka_tl = sum(float(b["bakiye"]) for b in bankalar if b["para_birimi"] == "TL")
+    banka_usd = sum(float(b["bakiye"]) for b in bankalar if b["para_birimi"] == "USD")
+    banka_usd_eqv = banka_usd + (banka_tl / kur if kur > 0 else 0)
+
+    # Stok kalemleri
+    if st.session_state.aktif_stok_data:
+        usd_stok, pazaryerleri = st.session_state.aktif_stok_data
+    else:
+        usd_stok, pazaryerleri = 0.0, {}
+
+    # %15 marj eklenmiş + %20 KDV dahil stok (formül: değer / 0.85 × 1.20)
+    stok_marjli = (usd_stok / 0.85) * 1.20 if usd_stok else 0
+
+    # Pazaryeri toplam (%20 KDV dahil)
+    pazaryeri_toplam_ham = sum(pazaryerleri.values())
+    pazaryeri_toplam_kdvli = pazaryeri_toplam_ham * 1.20
+
+    # İthalat
+    odenen_ithalat = st.session_state.aktif_ithalat_data or 0.0
+
+    # Borçlar
+    if st.session_state.aktif_cari_data:
+        usd_borc, tl_borc, eur_borc = st.session_state.aktif_cari_data
+    else:
+        usd_borc, tl_borc, eur_borc = 0.0, 0.0, 0.0
+    tl_borc_usd = tl_borc / kur if kur > 0 else 0
+    eur_borc_usd = eur_borc * (1.10) if eur_borc > 0 else 0  # tahmini EUR/USD ~1.10
+
+    # TOPLAM AKTİFLER
+    toplam_aktif = (
+        stok_marjli
+        + pazaryeri_toplam_kdvli
+        + odenen_ithalat
+        + banka_usd_eqv
+        - usd_borc
+        - tl_borc_usd
+        - eur_borc_usd
+    )
+
+    # ─── Sonuç Kartı ───
+    st.markdown(f"""
+    <div style="background:linear-gradient(135deg,#1E40AF,#3730A3,#7C3AED);border-radius:20px;padding:32px 28px;margin:8px 0 24px;text-align:center;box-shadow:0 12px 32px rgba(30,64,175,0.25)">
+        <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#C7D2FE;margin-bottom:10px">💎 TOPLAM AKTİFLERİNİZ</div>
+        <div style="font-size:42px;font-weight:800;color:#FFFFFF;font-family:monospace;letter-spacing:-1.5px;line-height:1.1">${fmt(toplam_aktif)}</div>
+        <div style="font-size:13px;color:#A5B4FC;margin-top:10px;font-family:monospace">≈ ₺{fmt(toplam_aktif * kur)} (kur: {kur})</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ─── Detay Breakdown ───
+    st.markdown("### 📊 Hesaplama Detayı")
+
+    detay_html = '<div style="display:flex;flex-direction:column;gap:8px">'
+
+    # 1. Stok
+    detay_html += f"""
+    <div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #3B82F6;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+            <div style="font-size:13px;font-weight:700;color:#0F172A">📦 Stok Değeri (marj + KDV dahil)</div>
+            <div style="font-size:11px;color:#64748B;margin-top:2px">Ham stok: ${fmt(usd_stok)} ÷ 0.85 (kar marjı) × 1.20 (KDV)</div>
+        </div>
+        <div style="font-size:18px;font-weight:700;color:#1D4ED8;font-family:monospace">+${fmt(stok_marjli)}</div>
+    </div>
+    """
+
+    # 2. Pazaryerleri
+    pazaryeri_detay = ""
+    if pazaryerleri:
+        pazaryeri_detay = "<br>" + " · ".join([f"{k}: ${v:,.0f}" for k, v in pazaryerleri.items()])
+    detay_html += f"""
+    <div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #10B981;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
+        <div style="flex:1">
+            <div style="font-size:13px;font-weight:700;color:#0F172A">🛒 Pazaryeri Stokları (KDV %20 dahil)</div>
+            <div style="font-size:11px;color:#64748B;margin-top:2px">Ham toplam: ${fmt(pazaryeri_toplam_ham)} × 1.20{pazaryeri_detay}</div>
+        </div>
+        <div style="font-size:18px;font-weight:700;color:#15803D;font-family:monospace;margin-left:14px">+${fmt(pazaryeri_toplam_kdvli)}</div>
+    </div>
+    """
+
+    # 3. İthalat
+    detay_html += f"""
+    <div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #8B5CF6;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+            <div style="font-size:13px;font-weight:700;color:#0F172A">🚢 İthalat Ödenmiş Tutar (Yoldaki/Gümrükteki Mal)</div>
+            <div style="font-size:11px;color:#64748B;margin-top:2px">İthalat Excel'inden "Ödenen / USD" toplamı</div>
+        </div>
+        <div style="font-size:18px;font-weight:700;color:#6D28D9;font-family:monospace">+${fmt(odenen_ithalat)}</div>
+    </div>
+    """
+
+    # 4. Banka
+    detay_html += f"""
+    <div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #F59E0B;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+            <div style="font-size:13px;font-weight:700;color:#0F172A">🏦 Banka Hesapları (USD eşdeğeri)</div>
+            <div style="font-size:11px;color:#64748B;margin-top:2px">USD: ${fmt(banka_usd)} + TL: ₺{fmt(banka_tl)} ÷ {kur}</div>
+        </div>
+        <div style="font-size:18px;font-weight:700;color:#B45309;font-family:monospace">+${fmt(banka_usd_eqv)}</div>
+    </div>
+    """
+
+    # 5. Borçlar (negatif)
+    if usd_borc or tl_borc or eur_borc:
+        borc_detay_arr = []
+        if usd_borc: borc_detay_arr.append(f"USD borç: ${usd_borc:,.0f}")
+        if tl_borc: borc_detay_arr.append(f"TL borç: ₺{tl_borc:,.0f} (${tl_borc_usd:,.0f})")
+        if eur_borc: borc_detay_arr.append(f"EUR borç: €{eur_borc:,.0f}")
+        toplam_borc_usd = usd_borc + tl_borc_usd + eur_borc_usd
+        detay_html += f"""
+        <div style="background:#FEF2F2;border:1px solid #FCA5A5;border-left:4px solid #DC2626;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
+            <div style="flex:1">
+                <div style="font-size:13px;font-weight:700;color:#991B1B">⚠️ Cari Borçlar</div>
+                <div style="font-size:11px;color:#B91C1C;margin-top:2px">{" · ".join(borc_detay_arr)}</div>
+            </div>
+            <div style="font-size:18px;font-weight:700;color:#7F1D1D;font-family:monospace;margin-left:14px">-${fmt(toplam_borc_usd)}</div>
+        </div>
+        """
+
+    detay_html += '</div>'
+    st.markdown(detay_html, unsafe_allow_html=True)
+
+    # ─── Eksik dosya uyarıları ───
+    st.markdown("---")
+    eksikler = []
+    if not st.session_state.aktif_stok_data:
+        eksikler.append("📦 Stok Değeri Raporu yüklenmedi")
+    if not st.session_state.aktif_ithalat_data:
+        eksikler.append("🚢 İthalat Ödeme Takip yüklenmedi")
+    if not st.session_state.aktif_cari_data:
+        eksikler.append("⚠️ Cari Alacaklar Listesi yüklenmedi")
+    if eksikler:
+        st.warning("📭 Eksik dosyalar (sıfır olarak hesaplandı):\n\n" + "\n".join(f"- {e}" for e in eksikler))
+
+    # ─── Temizleme ───
+    with st.expander("🗑️ Yüklenen verileri temizle"):
+        if st.button("Tüm Excel verilerini sıfırla"):
+            st.session_state.aktif_stok_data = None
+            st.session_state.aktif_ithalat_data = None
+            st.session_state.aktif_cari_data = None
+            st.success("Temizlendi.")
+            st.rerun()
+
+    # ─── Formül açıklaması ───
+    with st.expander("📐 Hesaplama Formülü"):
+        st.markdown(f"""
+        **Toplam Aktifler (USD) =**
+
+        - **(Stok Değeri ÷ 0.85) × 1.20** (Stok Excel'inden "USD SON DURUM STOK DEĞERİ" toplamı, %15 marj + %20 KDV dahil)
+        - **+ Pazaryeri Toplamları × 1.20** (HEPSIBURADA + VATAN + EERA + Diğer firmalar TOPLAM TUTAR sütunları, KDV %20 dahil)
+        - **+ İthalat Ödenmiş Tutar** (İthalat Excel "Ödenen / USD" toplamı)
+        - **+ Banka Hesapları USD eşdeğeri** (Uygulamadaki TL hesapları kur ile USD'ye çevrilir)
+        - **− Cari Borçlar** (Cari Excel'inden bakiyesi NEGATİF olan kalemler; TL/EUR borçlar kura çevrilir)
+
+        Kullanılan kur: **{kur} TL/USD** (sidebar'daki güncel kur — sidebar'da değiştirirsen burası da değişir)
+        """)
