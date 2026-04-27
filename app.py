@@ -3487,72 +3487,27 @@ elif sayfa == "💰 Toplam Aktifler":
     # ─── Detay Breakdown ───
     st.markdown("### 📊 Hesaplama Detayı")
 
-    detay_html = '<div style="display:flex;flex-direction:column;gap:8px">'
+    # Borç hesaplaması
+    borc_detay_arr = []
+    if usd_borc: borc_detay_arr.append(f"USD borç: ${usd_borc:,.0f}")
+    if tl_borc: borc_detay_arr.append(f"TL borç: ₺{tl_borc:,.0f} (${tl_borc_usd:,.0f})")
+    if eur_borc: borc_detay_arr.append(f"EUR borç: €{eur_borc:,.0f}")
+    toplam_borc_usd = usd_borc + tl_borc_usd + eur_borc_usd
+    borc_detay_str = " · ".join(borc_detay_arr) if borc_detay_arr else ""
 
-    # 1. Stok
-    detay_html += f"""
-    <div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #3B82F6;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
-        <div>
-            <div style="font-size:13px;font-weight:700;color:#0F172A">📦 Stok Değeri (marj + KDV dahil)</div>
-            <div style="font-size:11px;color:#64748B;margin-top:2px">Ham stok: ${fmt(usd_stok)} ÷ 0.85 (kar marjı) × 1.20 (KDV)</div>
-        </div>
-        <div style="font-size:18px;font-weight:700;color:#1D4ED8;font-family:monospace">+${fmt(stok_marjli)}</div>
-    </div>
-    """
-
-    # 2. Pazaryerleri
+    # Pazaryeri detayı
     pazaryeri_detay = ""
     if pazaryerleri:
         pazaryeri_detay = "<br>" + " · ".join([f"{k}: ${v:,.0f}" for k, v in pazaryerleri.items()])
-    detay_html += f"""
-    <div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #10B981;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
-        <div style="flex:1">
-            <div style="font-size:13px;font-weight:700;color:#0F172A">🛒 Pazaryeri Stokları (KDV %20 dahil)</div>
-            <div style="font-size:11px;color:#64748B;margin-top:2px">Ham toplam: ${fmt(pazaryeri_toplam_ham)} × 1.20{pazaryeri_detay}</div>
-        </div>
-        <div style="font-size:18px;font-weight:700;color:#15803D;font-family:monospace;margin-left:14px">+${fmt(pazaryeri_toplam_kdvli)}</div>
-    </div>
-    """
 
-    # 3. İthalat
-    detay_html += f"""
-    <div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #8B5CF6;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
-        <div>
-            <div style="font-size:13px;font-weight:700;color:#0F172A">🚢 İthalat Ödenmiş Tutar (Yoldaki/Gümrükteki Mal)</div>
-            <div style="font-size:11px;color:#64748B;margin-top:2px">İthalat Excel'inden "Ödenen / USD" toplamı</div>
-        </div>
-        <div style="font-size:18px;font-weight:700;color:#6D28D9;font-family:monospace">+${fmt(odenen_ithalat)}</div>
-    </div>
-    """
-
-    # 4. Banka
-    detay_html += f"""
-    <div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #F59E0B;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
-        <div>
-            <div style="font-size:13px;font-weight:700;color:#0F172A">🏦 Banka Hesapları (USD eşdeğeri)</div>
-            <div style="font-size:11px;color:#64748B;margin-top:2px">USD: ${fmt(banka_usd)} + TL: ₺{fmt(banka_tl)} ÷ {kur}</div>
-        </div>
-        <div style="font-size:18px;font-weight:700;color:#B45309;font-family:monospace">+${fmt(banka_usd_eqv)}</div>
-    </div>
-    """
-
-    # 5. Borçlar (negatif)
+    # HTML — tek satırlık inline div'ler, boş satır YOK
+    detay_html = '<div style="display:flex;flex-direction:column;gap:8px">'
+    detay_html += f'<div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #3B82F6;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700;color:#0F172A">📦 Stok Değeri (marj eklenmiş)</div><div style="font-size:11px;color:#64748B;margin-top:2px">Ham stok: ${fmt(usd_stok)} ÷ 0.85 (kar marjı)</div></div><div style="font-size:18px;font-weight:700;color:#1D4ED8;font-family:monospace">+${fmt(stok_marjli)}</div></div>'
+    detay_html += f'<div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #10B981;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#0F172A">🛒 Pazaryeri Stokları (KDV %20 dahil)</div><div style="font-size:11px;color:#64748B;margin-top:2px">Ham toplam: ${fmt(pazaryeri_toplam_ham)} × 1.20{pazaryeri_detay}</div></div><div style="font-size:18px;font-weight:700;color:#15803D;font-family:monospace;margin-left:14px">+${fmt(pazaryeri_toplam_kdvli)}</div></div>'
+    detay_html += f'<div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #8B5CF6;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700;color:#0F172A">🚢 İthalat Ödenmiş Tutar (Yoldaki/Gümrükteki Mal)</div><div style="font-size:11px;color:#64748B;margin-top:2px">İthalat Excel\'inden Ödenen / USD toplamı</div></div><div style="font-size:18px;font-weight:700;color:#6D28D9;font-family:monospace">+${fmt(odenen_ithalat)}</div></div>'
+    detay_html += f'<div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #F59E0B;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700;color:#0F172A">🏦 Banka Hesapları (USD eşdeğeri)</div><div style="font-size:11px;color:#64748B;margin-top:2px">USD: ${fmt(banka_usd)} + TL: ₺{fmt(banka_tl)} ÷ {kur}</div></div><div style="font-size:18px;font-weight:700;color:#B45309;font-family:monospace">+${fmt(banka_usd_eqv)}</div></div>'
     if usd_borc or tl_borc or eur_borc:
-        borc_detay_arr = []
-        if usd_borc: borc_detay_arr.append(f"USD borç: ${usd_borc:,.0f}")
-        if tl_borc: borc_detay_arr.append(f"TL borç: ₺{tl_borc:,.0f} (${tl_borc_usd:,.0f})")
-        if eur_borc: borc_detay_arr.append(f"EUR borç: €{eur_borc:,.0f}")
-        toplam_borc_usd = usd_borc + tl_borc_usd + eur_borc_usd
-        detay_html += f"""
-        <div style="background:#FEF2F2;border:1px solid #FCA5A5;border-left:4px solid #DC2626;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
-            <div style="flex:1">
-                <div style="font-size:13px;font-weight:700;color:#991B1B">⚠️ Cari Borçlar</div>
-                <div style="font-size:11px;color:#B91C1C;margin-top:2px">{" · ".join(borc_detay_arr)}</div>
-            </div>
-            <div style="font-size:18px;font-weight:700;color:#7F1D1D;font-family:monospace;margin-left:14px">-${fmt(toplam_borc_usd)}</div>
-        </div>
-        """
-
+        detay_html += f'<div style="background:#FEF2F2;border:1px solid #FCA5A5;border-left:4px solid #DC2626;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#991B1B">⚠️ Cari Borçlar</div><div style="font-size:11px;color:#B91C1C;margin-top:2px">{borc_detay_str}</div></div><div style="font-size:18px;font-weight:700;color:#7F1D1D;font-family:monospace;margin-left:14px">-${fmt(toplam_borc_usd)}</div></div>'
     detay_html += '</div>'
     st.markdown(detay_html, unsafe_allow_html=True)
 
