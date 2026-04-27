@@ -1217,7 +1217,11 @@ with st.sidebar:
         </div>
         """, unsafe_allow_html=True)
 
-    sayfa = st.radio("", [
+    # ─── Sayfa listesi (kullanıcıya göre dinamik) ───
+    aktif_kullanici_lower = st.session_state.get("aktif_kullanici", "").lower().strip()
+    SADECE_IBRAHIM_SAYFALARI = ["💰 Toplam Aktifler"]
+
+    tum_sayfalar = [
         "📊 Dashboard",
         "💳 Bu Hafta",
         "🏦 Banka Bakiyeleri",
@@ -1231,7 +1235,15 @@ with st.sidebar:
         "📂 Veri Yükleme",
         "📄 Raporlar",
         "🔔 Bildirim Ayarları",
-    ], label_visibility="collapsed")
+    ]
+
+    # Eğer kullanıcı ibrahim değilse, kısıtlı sayfaları menüden çıkar
+    if aktif_kullanici_lower != "ibrahim":
+        gosterilen_sayfalar = [s for s in tum_sayfalar if s not in SADECE_IBRAHIM_SAYFALARI]
+    else:
+        gosterilen_sayfalar = tum_sayfalar
+
+    sayfa = st.radio("", gosterilen_sayfalar, label_visibility="collapsed")
 
     st.markdown("---")
 
@@ -3227,6 +3239,12 @@ ALTER TABLE odemeler ADD COLUMN IF NOT EXISTS son_erteleme_tarih DATE;""", langu
 # 13) TOPLAM AKTİFLER
 # ════════════════════════════════════════════════════════════════════
 elif sayfa == "💰 Toplam Aktifler":
+    # ─── Yetki kontrolü: Sadece ibrahim erişebilir ───
+    aktif_kul = st.session_state.get("aktif_kullanici", "").lower().strip()
+    if aktif_kul != "ibrahim":
+        st.error("🔒 Bu sayfaya erişim yetkiniz yok.")
+        st.stop()
+
     st.markdown('<div class="baslik">💰 Toplam Aktifler</div>', unsafe_allow_html=True)
     st.markdown('<div class="alt-baslik">Stok + Pazaryeri + Yoldaki Mal + Banka − Borçlar (USD)</div>', unsafe_allow_html=True)
 
