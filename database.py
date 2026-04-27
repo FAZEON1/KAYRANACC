@@ -260,6 +260,7 @@ def odeme_vade_guncelle(odeme_id, yeni_vade):
     """
     Ödemenin vade tarihini günceller.
     İlk değişiklikte orijinal_vade kaydedilir, ertelendi_sayisi artırılır.
+    Kolonlar yoksa sessizce atlanır (sadece vade güncellenir).
     """
     sb = get_client()
     vade_str = yeni_vade.isoformat() if hasattr(yeni_vade, "isoformat") else str(yeni_vade)
@@ -274,38 +275,64 @@ def odeme_vade_guncelle(odeme_id, yeni_vade):
         return
 
     eski_vade = odeme.get("vade")
-    update_data = {"vade": vade_str}
 
-    # Eğer vade değişiyorsa (aynı gün değilse) erteleme bilgilerini kaydet
-    if eski_vade and str(eski_vade)[:10] != vade_str[:10]:
-        # orijinal_vade ve ertelendi_sayisi kolonları varsa güncelle
-        try:
-            # orijinal_vade ilk defa atanıyorsa, önceki vadeyi kaydet
-            if not odeme.get("orijinal_vade"):
-                update_data["orijinal_vade"] = eski_vade
-            # ertelendi_sayisi'nı artır
-            update_data["ertelendi_sayisi"] = (odeme.get("ertelendi_sayisi") or 0) + 1
-            update_data["son_erteleme_tarih"] = date.today().isoformat()
-        except Exception:
-            pass
-
-    # Güncellemeyi dene; orijinal_vade kolonları yoksa sadece vade güncellensin
+    # 1) Vadeyi her zaman güncelle (en kritik adım)
     try:
-        sb.table("odemeler").update(update_data).eq("id", odeme_id).execute()
-    except Exception:
-        # Kolonlar yoksa sadece vadeyi güncelle
         sb.table("odemeler").update({"vade": vade_str}).eq("id", odeme_id).execute()
+    except Exception:
+        return  # vade bile güncellenemediyse fonksiyon başarısız
+
+    # Vade gerçekten değişti mi?
+    if eski_vade and str(eski_vade)[:10] == vade_str[:10]:
+        return  # aynı tarih, erteleme tracking'e gerek yok
+
+    # 2) orijinal_vade kolonu - ilk defa erteleniyorsa doldur
+    try:
+        if not odeme.get("orijinal_vade"):
+            sb.table("odemeler").update({"orijinal_vade": eski_vade}).eq("id", odeme_id).execute()
+    except Exception:
+        pass  # kolon yoksa sessizce geç
+
+    # 3) ertelendi_sayisi kolonu - artır
+    try:
+        yeni_sayi = (odeme.get("ertelendi_sayisi") or 0) + 1
+        sb.table("odemeler").update({"ertelendi_sayisi": yeni_sayi}).eq("id", odeme_id).execute()
+    except Exception:
+        pass
+
+    # 4) son_erteleme_tarih kolonu
+    try:
+        sb.table("odemeler").update({"son_erteleme_tarih": date.today().isoformat()}).eq("id", odeme_id).execute()
+    except Exception:
+        pass
 
 
 def get_ertelenen_odemeler():
-    """Ertelendi sayısı 1+ olan tüm ödemeleri döndürür."""
+    """
+    Ertelenmiş ödemeleri döndürür. İki yöntem dener:
+    1) ertelendi_sayisi > 0 (Supabase'de kolon varsa)
+    2) Fallback: orijinal_vade DOLU olan kayıtlar
+    İkisi de yoksa boş liste döner.
+    """
     sb = get_client()
+
+    # Yöntem 1: ertelendi_sayisi kolonu varsa
     try:
         res = sb.table("odemeler").select("*").gt("ertelendi_sayisi", 0).execute()
-        return res.data or []
+        if res.data:
+            return res.data
     except Exception:
-        # ertelendi_sayisi kolonu yoksa boş liste döndür
-        return []
+        pass
+
+    # Yöntem 2: orijinal_vade dolu olanlar (kolon varsa)
+    try:
+        res = sb.table("odemeler").select("*").not_.is_("orijinal_vade", "null").execute()
+        if res.data:
+            return res.data
+    except Exception:
+        pass
+
+    return []
 
 
 def odeme_tutar_guncelle(odeme_id, tutar_tl=None, tutar_usd=None):

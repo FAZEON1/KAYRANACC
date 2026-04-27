@@ -2980,16 +2980,51 @@ elif sayfa == "⏳ Ertelenen Ödemeler":
     st.markdown('<div class="baslik">⏳ Ertelenen Ödemeler</div>', unsafe_allow_html=True)
     st.markdown('<div class="alt-baslik">Vade tarihi değiştirilmiş ödemeler</div>', unsafe_allow_html=True)
 
+    # ─── Tanı: Supabase'de kolonlar var mı kontrol et ───
+    sb_test = None
+    try:
+        from database import get_client
+        sb_test = get_client()
+        # Test et: ertelendi_sayisi var mı?
+        test_res = sb_test.table("odemeler").select("id, ertelendi_sayisi, orijinal_vade").limit(1).execute()
+        kolonlar_var = True
+    except Exception as e:
+        kolonlar_var = False
+
+    if not kolonlar_var:
+        st.error("❌ **Supabase tablonuzda gerekli kolonlar yok!**")
+        st.markdown("""
+        <div style="background:#FEF3C7;border:2px solid #F59E0B;border-radius:12px;padding:18px 22px;margin:12px 0">
+            <div style="font-size:14px;color:#78350F;font-weight:700;margin-bottom:10px">
+                📋 Ertelenenleri görebilmek için Supabase'de 3 kolon eklenmeli
+            </div>
+            <div style="font-size:13px;color:#92400E;line-height:1.6">
+                <b>1.</b> <a href="https://supabase.com/dashboard" target="_blank" style="color:#1E40AF;font-weight:600">supabase.com/dashboard</a> 'a git<br>
+                <b>2.</b> Projen <code>qspwlqegoeudifxxrxcj</code> 'yi aç<br>
+                <b>3.</b> Sol menüden <b>SQL Editor</b> → <b>New Query</b><br>
+                <b>4.</b> Aşağıdaki kodu yapıştır → <b>RUN</b> butonuna bas<br>
+                <b>5.</b> Bu sayfayı yenile
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.code("""ALTER TABLE odemeler ADD COLUMN IF NOT EXISTS orijinal_vade DATE;
+ALTER TABLE odemeler ADD COLUMN IF NOT EXISTS ertelendi_sayisi INTEGER DEFAULT 0;
+ALTER TABLE odemeler ADD COLUMN IF NOT EXISTS son_erteleme_tarih DATE;""", language="sql")
+
+        st.info("Bu komutlar **mevcut verilerinize ZARAR VERMEZ** — sadece 3 yeni boş kolon ekler. Tek seferlik bir işlemdir.")
+        st.stop()
+
+    # ─── Kolonlar var, şimdi ertelenenleri al ───
     ertelenenler = get_ertelenen_odemeler()
 
     if not ertelenenler:
-        st.info("📭 Henüz ertelenmiş ödeme yok. **'Bu Hafta'** sayfasından bir ödemenin **'📅 Vadeyi Ötele'** kutusuyla vade değiştirebilirsin.")
+        st.info("📭 Henüz ertelenmiş ödeme yok.")
         st.markdown("""
-        <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:14px 18px;margin-top:16px;">
-            <div style="font-size:13px;color:#78350F;font-weight:600;margin-bottom:6px">💡 Bilgilendirme</div>
-            <div style="font-size:12px;color:#92400E;line-height:1.5">
-                Bu özelliğin tam çalışması için Supabase'de <code>orijinal_vade</code>, <code>ertelendi_sayisi</code> ve
-                <code>son_erteleme_tarih</code> kolonlarının olması gerekir. Sayfanın sonundaki SQL'i Supabase'de çalıştırın.
+        <div style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:10px;padding:14px 18px;margin-top:12px">
+            <div style="font-size:13px;color:#0369A1;font-weight:600;margin-bottom:6px">💡 Nasıl ertelerim?</div>
+            <div style="font-size:12px;color:#075985;line-height:1.5">
+                <b>"Bu Hafta"</b> sayfasında bir ödemenin altındaki <b>"📅 Vadeyi Ötele"</b> kutucuğunu işaretle, yeni tarih seç, <b>💾 Ötele</b>'ye bas. Ya da hızlı butonlardan <b>+1, +3, +7, +30 gün</b> kullan. Sonra bu sayfaya geri dön.
             </div>
         </div>
         """, unsafe_allow_html=True)
