@@ -3409,19 +3409,39 @@ elif sayfa == "💰 Toplam Aktifler":
         return usd_borc, tl_borc, eur_borc
 
     # ─── Session state init + Supabase'den önceki kayıtları yükle ───
-    aktif_kul = st.session_state.get("aktif_kullanici", "ibrahim").lower().strip()
+    aktif_kul = (st.session_state.get("aktif_kullanici") or "ibrahim").lower().strip()
+    if not aktif_kul:
+        aktif_kul = "ibrahim"
 
     if "aktif_excel_yuklendi" not in st.session_state:
-        # İlk açılış — Supabase'den önceki kayıtları çek
-        st.session_state.aktif_stok_data = aktif_excel_oku(aktif_kul, "stok")
-        st.session_state.aktif_ithalat_data = aktif_excel_oku(aktif_kul, "ithalat")
-        st.session_state.aktif_cari_data = aktif_excel_oku(aktif_kul, "cari")
-        # Tuple'a geri çevir (JSON list/dict olarak gelir, bazı parser'lar tuple bekler)
-        if isinstance(st.session_state.aktif_stok_data, list) and len(st.session_state.aktif_stok_data) == 2:
-            usd_stok_v, pazar_dict = st.session_state.aktif_stok_data
-            st.session_state.aktif_stok_data = (float(usd_stok_v), pazar_dict)
-        if isinstance(st.session_state.aktif_cari_data, list) and len(st.session_state.aktif_cari_data) == 3:
-            st.session_state.aktif_cari_data = tuple(float(x) for x in st.session_state.aktif_cari_data)
+        # İlk açılış — Supabase'den önceki kayıtları çek (tablo yoksa None döner, sorun değil)
+        try:
+            st.session_state.aktif_stok_data = aktif_excel_oku(aktif_kul, "stok")
+        except Exception:
+            st.session_state.aktif_stok_data = None
+        try:
+            st.session_state.aktif_ithalat_data = aktif_excel_oku(aktif_kul, "ithalat")
+        except Exception:
+            st.session_state.aktif_ithalat_data = None
+        try:
+            st.session_state.aktif_cari_data = aktif_excel_oku(aktif_kul, "cari")
+        except Exception:
+            st.session_state.aktif_cari_data = None
+
+        # JSON list olarak gelirse tuple'a çevir (parser tuple bekler)
+        try:
+            if isinstance(st.session_state.aktif_stok_data, list) and len(st.session_state.aktif_stok_data) == 2:
+                usd_stok_v, pazar_dict = st.session_state.aktif_stok_data
+                if not isinstance(pazar_dict, dict):
+                    pazar_dict = {}
+                st.session_state.aktif_stok_data = (float(usd_stok_v or 0), pazar_dict)
+        except Exception:
+            st.session_state.aktif_stok_data = None
+        try:
+            if isinstance(st.session_state.aktif_cari_data, list) and len(st.session_state.aktif_cari_data) == 3:
+                st.session_state.aktif_cari_data = tuple(float(x or 0) for x in st.session_state.aktif_cari_data)
+        except Exception:
+            st.session_state.aktif_cari_data = None
         st.session_state.aktif_excel_yuklendi = True
 
     # ─── Excel yükleme bölümü ───
@@ -3435,57 +3455,72 @@ elif sayfa == "💰 Toplam Aktifler":
 
     col1, col2, col3 = st.columns(3)
 
-    def _stok_data_save(data):
-        """Stok parse sonucu kalıcı kaydet."""
-        usd_stok_v, pazar_dict = data
-        aktif_excel_kaydet(aktif_kul, "stok", [float(usd_stok_v), pazar_dict])
-
     with col1:
         st.markdown("**1️⃣ Stok Değeri Raporu**")
         if st.session_state.aktif_stok_data:
-            usd_v, pzr = st.session_state.aktif_stok_data
-            st.success(f"✅ Önceki yüklenmiş: ${usd_v:,.0f}")
+            try:
+                usd_v, pzr = st.session_state.aktif_stok_data
+                st.success(f"✅ Önceki yüklenmiş: ${float(usd_v):,.0f}")
+            except Exception:
+                st.session_state.aktif_stok_data = None
         stok_file = st.file_uploader("Stok Excel", type=["xls", "xlsx"], key="aktif_stok_upload", label_visibility="collapsed")
         if stok_file:
             try:
                 parsed = parse_stok_excel(stok_file.read())
                 st.session_state.aktif_stok_data = parsed
-                _stok_data_save(parsed)
-                st.success(f"✅ {stok_file.name} (kaydedildi)")
+                # Supabase'e kaydet (tablo yoksa hata vermeden geç)
+                try:
+                    usd_stok_v, pazar_dict = parsed
+                    aktif_excel_kaydet(aktif_kul, "stok", [float(usd_stok_v), pazar_dict])
+                except Exception:
+                    pass
+                st.success(f"✅ {stok_file.name}")
                 st.rerun()
             except Exception as e:
-                st.error(f"❌ Hata: {e}")
+                st.error(f"❌ Hata: {type(e).__name__}: {e}")
 
     with col2:
         st.markdown("**2️⃣ İthalat Ödeme Takip**")
         if st.session_state.aktif_ithalat_data:
-            st.success(f"✅ Önceki yüklenmiş: ${float(st.session_state.aktif_ithalat_data):,.0f}")
+            try:
+                st.success(f"✅ Önceki yüklenmiş: ${float(st.session_state.aktif_ithalat_data):,.0f}")
+            except Exception:
+                st.session_state.aktif_ithalat_data = None
         ithalat_file = st.file_uploader("İthalat Excel", type=["xls", "xlsx"], key="aktif_ithalat_upload", label_visibility="collapsed")
         if ithalat_file:
             try:
                 parsed = parse_ithalat_excel(ithalat_file.read())
                 st.session_state.aktif_ithalat_data = parsed
-                aktif_excel_kaydet(aktif_kul, "ithalat", float(parsed))
-                st.success(f"✅ {ithalat_file.name} (kaydedildi)")
+                try:
+                    aktif_excel_kaydet(aktif_kul, "ithalat", float(parsed))
+                except Exception:
+                    pass
+                st.success(f"✅ {ithalat_file.name}")
                 st.rerun()
             except Exception as e:
-                st.error(f"❌ Hata: {e}")
+                st.error(f"❌ Hata: {type(e).__name__}: {e}")
 
     with col3:
         st.markdown("**3️⃣ Cari Alacaklar Listesi**")
         if st.session_state.aktif_cari_data:
-            usd_b, tl_b, eur_b = st.session_state.aktif_cari_data
-            st.success(f"✅ Önceki yüklenmiş: ${usd_b:,.0f} USD borç")
+            try:
+                usd_b, tl_b, eur_b = st.session_state.aktif_cari_data
+                st.success(f"✅ Önceki yüklenmiş: ${float(usd_b):,.0f} USD borç")
+            except Exception:
+                st.session_state.aktif_cari_data = None
         cari_file = st.file_uploader("Cari Excel", type=["xls", "xlsx"], key="aktif_cari_upload", label_visibility="collapsed")
         if cari_file:
             try:
                 parsed = parse_cari_excel(cari_file.read())
                 st.session_state.aktif_cari_data = parsed
-                aktif_excel_kaydet(aktif_kul, "cari", list(parsed))
-                st.success(f"✅ {cari_file.name} (kaydedildi)")
+                try:
+                    aktif_excel_kaydet(aktif_kul, "cari", list(parsed))
+                except Exception:
+                    pass
+                st.success(f"✅ {cari_file.name}")
                 st.rerun()
             except Exception as e:
-                st.error(f"❌ Hata: {e}")
+                st.error(f"❌ Hata: {type(e).__name__}: {e}")
 
     st.markdown("---")
 
@@ -3496,25 +3531,44 @@ elif sayfa == "💰 Toplam Aktifler":
     banka_usd_eqv = banka_usd + (banka_tl / kur if kur > 0 else 0)
 
     # Stok kalemleri
-    if st.session_state.aktif_stok_data:
-        usd_stok, pazaryerleri = st.session_state.aktif_stok_data
-    else:
+    usd_stok, pazaryerleri = 0.0, {}
+    try:
+        if st.session_state.aktif_stok_data:
+            data = st.session_state.aktif_stok_data
+            if isinstance(data, (tuple, list)) and len(data) == 2:
+                usd_stok = float(data[0] or 0)
+                pazaryerleri = data[1] if isinstance(data[1], dict) else {}
+    except Exception:
         usd_stok, pazaryerleri = 0.0, {}
 
     # %15 marj eklenmiş + %20 KDV dahil stok (formül: değer / 0.85 × 1.20)
     stok_marjli = (usd_stok / 0.85) * 1.20 if usd_stok else 0
 
-    # Pazaryeri toplam (%20 KDV dahil)
-    pazaryeri_toplam_ham = sum(pazaryerleri.values())
+    # Pazaryeri toplam (%20 KDV dahil) - değerleri güvenli float'a çevir
+    pazaryeri_toplam_ham = 0.0
+    for v in pazaryerleri.values():
+        try:
+            pazaryeri_toplam_ham += float(v or 0)
+        except (TypeError, ValueError):
+            pass
     pazaryeri_toplam_kdvli = pazaryeri_toplam_ham * 1.20
 
     # İthalat
-    odenen_ithalat = st.session_state.aktif_ithalat_data or 0.0
+    try:
+        odenen_ithalat = float(st.session_state.aktif_ithalat_data or 0)
+    except (TypeError, ValueError):
+        odenen_ithalat = 0.0
 
     # Borçlar
-    if st.session_state.aktif_cari_data:
-        usd_borc, tl_borc, eur_borc = st.session_state.aktif_cari_data
-    else:
+    usd_borc, tl_borc, eur_borc = 0.0, 0.0, 0.0
+    try:
+        if st.session_state.aktif_cari_data:
+            cari = st.session_state.aktif_cari_data
+            if isinstance(cari, (tuple, list)) and len(cari) == 3:
+                usd_borc = float(cari[0] or 0)
+                tl_borc = float(cari[1] or 0)
+                eur_borc = float(cari[2] or 0)
+    except Exception:
         usd_borc, tl_borc, eur_borc = 0.0, 0.0, 0.0
     tl_borc_usd = tl_borc / kur if kur > 0 else 0
     eur_borc_usd = eur_borc * (1.10) if eur_borc > 0 else 0  # tahmini EUR/USD ~1.10
@@ -3524,8 +3578,23 @@ elif sayfa == "💰 Toplam Aktifler":
     cek_tl_usd_eqv = cek_tl / kur if kur > 0 else 0
     cek_toplam_usd = cek_tl_usd_eqv + cek_usd
 
-    # ─── Manuel Kalemler ───
-    manuel_kalemler = aktif_manuel_listele(aktif_kul)
+    # ─── Manuel Kalemler (Supabase + session_state fallback) ───
+    # Önce Supabase'den dene, başarısızsa session_state kullan
+    if "manuel_kalemler_local" not in st.session_state:
+        st.session_state.manuel_kalemler_local = []
+
+    manuel_kalemler_db = []
+    try:
+        manuel_kalemler_db = aktif_manuel_listele(aktif_kul) or []
+    except Exception:
+        manuel_kalemler_db = []
+
+    # Eğer Supabase'den veri geldiyse onu kullan, yoksa session'dan
+    if manuel_kalemler_db:
+        manuel_kalemler = manuel_kalemler_db
+    else:
+        manuel_kalemler = st.session_state.manuel_kalemler_local
+
     manuel_ekle_toplam = 0.0
     manuel_cikar_toplam = 0.0
     for k in manuel_kalemler:
@@ -3577,7 +3646,10 @@ elif sayfa == "💰 Toplam Aktifler":
     # Pazaryeri detayı
     pazaryeri_detay = ""
     if pazaryerleri:
-        pazaryeri_detay = "<br>" + " · ".join([f"{k}: ${v:,.0f}" for k, v in pazaryerleri.items()])
+        try:
+            pazaryeri_detay = "<br>" + " · ".join([f"{k}: ${float(v or 0):,.0f}" for k, v in pazaryerleri.items()])
+        except Exception:
+            pazaryeri_detay = ""
 
     # HTML — tek satırlık inline div'ler, boş satır YOK
     detay_html = '<div style="display:flex;flex-direction:column;gap:8px">'
@@ -3637,11 +3709,29 @@ elif sayfa == "💰 Toplam Aktifler":
                 elif yeni_tutar <= 0:
                     st.error("Tutar 0'dan büyük olmalı")
                 else:
-                    if aktif_manuel_ekle(aktif_kul, yeni_aciklama.strip(), yeni_tutar, yeni_pb, yeni_tip):
-                        st.success("✅ Kalem eklendi")
-                        st.rerun()
+                    # Önce Supabase'e kaydetmeyi dene
+                    supabase_basarili = False
+                    try:
+                        supabase_basarili = aktif_manuel_ekle(aktif_kul, yeni_aciklama.strip(), yeni_tutar, yeni_pb, yeni_tip)
+                    except Exception:
+                        supabase_basarili = False
+
+                    # Supabase başarısızsa session_state'e ekle (fallback)
+                    if not supabase_basarili:
+                        import time as _time
+                        st.session_state.manuel_kalemler_local.append({
+                            "id": f"local_{int(_time.time() * 1000)}",
+                            "kullanici": aktif_kul,
+                            "aciklama": yeni_aciklama.strip(),
+                            "tutar": float(yeni_tutar),
+                            "para_birimi": yeni_pb,
+                            "tip": yeni_tip,
+                            "olusturuldu": str(date.today()),
+                        })
+                        st.warning("⚠️ Supabase'e kaydedilemedi (tablo yok), oturum belleğine kaydedildi.")
                     else:
-                        st.error("❌ Kayıt başarısız (Supabase tablosu eksik olabilir)")
+                        st.success("✅ Kalem eklendi (kalıcı)")
+                    st.rerun()
 
     # Mevcut kalemleri listele
     if manuel_kalemler:
@@ -3664,7 +3754,18 @@ elif sayfa == "💰 Toplam Aktifler":
             with col_b:
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.button("🗑️", key=f"manuel_sil_{k['id']}", help="Sil"):
-                    aktif_manuel_sil(k['id'])
+                    kalem_id = k['id']
+                    # Local kalem ise (id "local_" ile başlar) session'dan sil
+                    if isinstance(kalem_id, str) and kalem_id.startswith("local_"):
+                        st.session_state.manuel_kalemler_local = [
+                            kk for kk in st.session_state.manuel_kalemler_local
+                            if kk.get("id") != kalem_id
+                        ]
+                    else:
+                        try:
+                            aktif_manuel_sil(kalem_id)
+                        except Exception:
+                            pass
                     st.rerun()
 
     # ─── Eksik dosya uyarıları ───
