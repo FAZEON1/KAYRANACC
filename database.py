@@ -651,10 +651,11 @@ def get_cek_toplamlari():
     Sistemdeki TAHSİL EDİLMEMİŞ (henüz nakde çevrilmemiş) çeklerin
     para birimine göre kalan tutarlarını ve adetlerini döndürür.
 
-    Mantık:
-    - "kalan" sütunu var → onu kullan (en doğru: meblagh - odenen)
-    - "kalan" yoksa veya 0 ise → "meblagh - odenen" hesapla
-    - Eğer durum "Ödendi" / "Tahsil Edildi" / "Iptal" gibi ise → DAHİL ETME
+    "Ödenmiş" sayılma kuralları (DAHİL EDİLMEZ):
+    - Durum: Ödendi / Tahsil Edildi / İptal / Portföyden Çıktı
+    - Tamamen ödenmiş: meblagh ≈ odenen (ya da kalan ≤ 0)
+
+    "Ciro Edildi" durumundakiler DAHİL EDİLİR (hala borç anlamında).
     Returns: (toplam_tl, toplam_usd, adet_tl, adet_usd)
     """
     sb = get_client()
@@ -666,23 +667,35 @@ def get_cek_toplamlari():
         adet_usd = 0
         for c in res.data or []:
             try:
-                # Tahsil edilmiş/iptal çekleri atla
+                # 1) Durumdan tahsil edilmiş/iptal çekleri atla
                 durum = (c.get("durum") or "").strip().upper()
                 if durum in ("ÖDENDİ", "ODENDI", "TAHSIL EDİLDİ", "TAHSIL EDILDI",
-                             "TAHSİL", "TAHSIL", "İPTAL", "IPTAL", "PORTFÖYDEN ÇIKTI"):
+                             "TAHSİL", "İPTAL", "IPTAL", "PORTFÖYDEN ÇIKTI"):
                     continue
 
-                # Kalan tutarı hesapla (önce kolon, yoksa meblagh - odenen)
-                kalan = c.get("kalan")
-                if kalan is None or float(kalan or 0) == 0:
-                    meblag = float(c.get("meblagh") or c.get("meblag") or 0)
-                    odenen = float(c.get("odenen") or 0)
-                    kalan_v = meblag - odenen
-                else:
-                    kalan_v = float(kalan)
+                # 2) Tutarları al ve gerçek kalan hesapla
+                meblag = float(c.get("meblagh") or c.get("meblag") or 0)
+                odenen = float(c.get("odenen") or 0)
+                kalan_kolon = c.get("kalan")
 
-                if kalan_v <= 0:
-                    continue  # tamamen ödenmiş çek
+                # Gerçek kalan: meblagh - odenen (kalan kolonu yanıltıcı olabilir)
+                gercek_kalan = meblag - odenen
+
+                # 3) Tamamen ödenmiş (1 cent toleransla)
+                if gercek_kalan <= 0.01:
+                    continue
+
+                # Kalan kolon dolu ve mantıklıysa onu kullan, değilse hesapla
+                try:
+                    kalan_v = float(kalan_kolon) if kalan_kolon else gercek_kalan
+                    # Eğer kolon değeri meblag'a eşitse muhtemelen hiç güncellenmemiş — gerçek kalanı kullan
+                    if kalan_v == meblag and odenen > 0:
+                        kalan_v = gercek_kalan
+                except (TypeError, ValueError):
+                    kalan_v = gercek_kalan
+
+                if kalan_v <= 0.01:
+                    continue
 
                 pb = (c.get("para_birimi") or "TL").upper().strip()
                 if pb == "USD":

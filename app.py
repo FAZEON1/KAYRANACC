@@ -2226,10 +2226,23 @@ elif sayfa == "📋 Firma Çekleri":
         if not cekler:
             return
         sym = "$" if cur == "USD" else "₺"
-        toplam_meblagh = sum(c.get("meblagh") or 0 for c in cekler)
-        toplam_odenen  = sum(c.get("odenen") or 0 for c in cekler)
-        toplam_kalan   = sum(c.get("kalan") or 0 for c in cekler)
-        odendi_cnt     = sum(1 for c in cekler if str(c.get("durum","")).lower() in ("ödendi","odendi"))
+
+        def _f(v):
+            try: return float(v) if v else 0.0
+            except (TypeError, ValueError): return 0.0
+
+        # Ödenmiş statü kontrolü
+        def _odendi_mi(c):
+            durum = str(c.get("durum", "")).strip().upper()
+            return durum in ("ÖDENDİ", "ODENDI", "TAHSIL EDİLDİ", "TAHSIL EDILDI",
+                             "TAHSIL", "İPTAL", "IPTAL", "PORTFÖYDEN ÇIKTI")
+
+        toplam_meblagh = sum(_f(c.get("meblagh")) for c in cekler)
+        toplam_odenen  = sum(_f(c.get("odenen")) for c in cekler)
+        # Sadece ÖDENMEMİŞ çeklerin kalanını topla (ödendi olanlar 0 sayılır)
+        toplam_kalan   = sum(_f(c.get("kalan")) for c in cekler if not _odendi_mi(c))
+        odendi_cnt     = sum(1 for c in cekler if _odendi_mi(c))
+        bekleyen_cnt   = len(cekler) - odendi_cnt
         ozet_html = (
             '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">'
             '<div style="background:#F8FAFC;border-radius:12px;padding:16px 18px;border:1px solid #E2E8F0;border-top:3px solid #3B82F6;text-align:center">'
@@ -2245,7 +2258,7 @@ elif sayfa == "📋 Firma Çekleri":
             '<div style="background:#FFFBEB;border-radius:12px;padding:16px 18px;border:1px solid #FDE68A;border-top:3px solid #F59E0B;text-align:center">'
             '<div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#92400E;margin-bottom:8px">Toplam Kalan</div>'
             f'<div style="font-size:22px;font-weight:700;color:#78350F;font-family:monospace">{sym}{fmt(toplam_kalan)}</div>'
-            f'<div style="font-size:11px;margin-top:5px;color:#B45309">{len(cekler)-odendi_cnt} bekleyen</div>'
+            f'<div style="font-size:11px;margin-top:5px;color:#B45309">{bekleyen_cnt} bekleyen/ciro</div>'
             '</div>'
             '</div>'
         )
