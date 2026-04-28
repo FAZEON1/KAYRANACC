@@ -15,6 +15,8 @@ from database import (
     get_bankalar, banka_ekle, banka_guncelle, banka_sil,
     get_cekler, cek_ekle_bulk, cek_sil, cek_sil_hepsi,
     get_ertelenen_odemeler, get_virmanlar, virman_yap, virman_geri_al,
+    aktif_excel_kaydet, aktif_excel_oku, aktif_excel_sil,
+    aktif_manuel_ekle, aktif_manuel_listele, aktif_manuel_sil, get_cek_toplamlari,
 )
 from excel_islemler import (
     excel_yukle_odeme_listesi, excel_yukle_cek_listesi,
@@ -3406,57 +3408,84 @@ elif sayfa == "💰 Toplam Aktifler":
                     pass
         return usd_borc, tl_borc, eur_borc
 
-    # ─── Session state'te dosyaları sakla ───
-    if "aktif_stok_data" not in st.session_state:
-        st.session_state.aktif_stok_data = None
-    if "aktif_ithalat_data" not in st.session_state:
-        st.session_state.aktif_ithalat_data = None
-    if "aktif_cari_data" not in st.session_state:
-        st.session_state.aktif_cari_data = None
+    # ─── Session state init + Supabase'den önceki kayıtları yükle ───
+    aktif_kul = st.session_state.get("aktif_kullanici", "ibrahim").lower().strip()
+
+    if "aktif_excel_yuklendi" not in st.session_state:
+        # İlk açılış — Supabase'den önceki kayıtları çek
+        st.session_state.aktif_stok_data = aktif_excel_oku(aktif_kul, "stok")
+        st.session_state.aktif_ithalat_data = aktif_excel_oku(aktif_kul, "ithalat")
+        st.session_state.aktif_cari_data = aktif_excel_oku(aktif_kul, "cari")
+        # Tuple'a geri çevir (JSON list/dict olarak gelir, bazı parser'lar tuple bekler)
+        if isinstance(st.session_state.aktif_stok_data, list) and len(st.session_state.aktif_stok_data) == 2:
+            usd_stok_v, pazar_dict = st.session_state.aktif_stok_data
+            st.session_state.aktif_stok_data = (float(usd_stok_v), pazar_dict)
+        if isinstance(st.session_state.aktif_cari_data, list) and len(st.session_state.aktif_cari_data) == 3:
+            st.session_state.aktif_cari_data = tuple(float(x) for x in st.session_state.aktif_cari_data)
+        st.session_state.aktif_excel_yuklendi = True
 
     # ─── Excel yükleme bölümü ───
     st.markdown("### 📤 Excel Dosyalarını Yükle")
     st.markdown(
         '<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#1E3A8A">'
-        '💡 Bu sayfada yüklenen dosyalar <b>diğer sayfalarla karışmaz</b>. Sadece toplam aktif hesaplamasında kullanılır.'
+        '💡 Yüklediğiniz Excel verileri <b>kalıcı olarak saklanır</b> — sayfayı yenileseniz veya çıkış yapsanız bile silinmez. Yeniden yüklemek isterseniz aşağıdan yeni dosya yükleyin.'
         '</div>',
         unsafe_allow_html=True
     )
 
     col1, col2, col3 = st.columns(3)
 
+    def _stok_data_save(data):
+        """Stok parse sonucu kalıcı kaydet."""
+        usd_stok_v, pazar_dict = data
+        aktif_excel_kaydet(aktif_kul, "stok", [float(usd_stok_v), pazar_dict])
+
     with col1:
         st.markdown("**1️⃣ Stok Değeri Raporu**")
+        if st.session_state.aktif_stok_data:
+            usd_v, pzr = st.session_state.aktif_stok_data
+            st.success(f"✅ Önceki yüklenmiş: ${usd_v:,.0f}")
         stok_file = st.file_uploader("Stok Excel", type=["xls", "xlsx"], key="aktif_stok_upload", label_visibility="collapsed")
         if stok_file:
             try:
-                st.session_state.aktif_stok_data = parse_stok_excel(stok_file.read())
-                st.success(f"✅ {stok_file.name}")
+                parsed = parse_stok_excel(stok_file.read())
+                st.session_state.aktif_stok_data = parsed
+                _stok_data_save(parsed)
+                st.success(f"✅ {stok_file.name} (kaydedildi)")
+                st.rerun()
             except Exception as e:
                 st.error(f"❌ Hata: {e}")
-                st.session_state.aktif_stok_data = None
 
     with col2:
         st.markdown("**2️⃣ İthalat Ödeme Takip**")
+        if st.session_state.aktif_ithalat_data:
+            st.success(f"✅ Önceki yüklenmiş: ${float(st.session_state.aktif_ithalat_data):,.0f}")
         ithalat_file = st.file_uploader("İthalat Excel", type=["xls", "xlsx"], key="aktif_ithalat_upload", label_visibility="collapsed")
         if ithalat_file:
             try:
-                st.session_state.aktif_ithalat_data = parse_ithalat_excel(ithalat_file.read())
-                st.success(f"✅ {ithalat_file.name}")
+                parsed = parse_ithalat_excel(ithalat_file.read())
+                st.session_state.aktif_ithalat_data = parsed
+                aktif_excel_kaydet(aktif_kul, "ithalat", float(parsed))
+                st.success(f"✅ {ithalat_file.name} (kaydedildi)")
+                st.rerun()
             except Exception as e:
                 st.error(f"❌ Hata: {e}")
-                st.session_state.aktif_ithalat_data = None
 
     with col3:
         st.markdown("**3️⃣ Cari Alacaklar Listesi**")
+        if st.session_state.aktif_cari_data:
+            usd_b, tl_b, eur_b = st.session_state.aktif_cari_data
+            st.success(f"✅ Önceki yüklenmiş: ${usd_b:,.0f} USD borç")
         cari_file = st.file_uploader("Cari Excel", type=["xls", "xlsx"], key="aktif_cari_upload", label_visibility="collapsed")
         if cari_file:
             try:
-                st.session_state.aktif_cari_data = parse_cari_excel(cari_file.read())
-                st.success(f"✅ {cari_file.name}")
+                parsed = parse_cari_excel(cari_file.read())
+                st.session_state.aktif_cari_data = parsed
+                aktif_excel_kaydet(aktif_kul, "cari", list(parsed))
+                st.success(f"✅ {cari_file.name} (kaydedildi)")
+                st.rerun()
             except Exception as e:
                 st.error(f"❌ Hata: {e}")
-                st.session_state.aktif_cari_data = None
 
     st.markdown("---")
 
@@ -3490,15 +3519,39 @@ elif sayfa == "💰 Toplam Aktifler":
     tl_borc_usd = tl_borc / kur if kur > 0 else 0
     eur_borc_usd = eur_borc * (1.10) if eur_borc > 0 else 0  # tahmini EUR/USD ~1.10
 
+    # ─── Çekler (Sistemden) ───
+    cek_tl, cek_usd, cek_adet_tl, cek_adet_usd = get_cek_toplamlari()
+    cek_tl_usd_eqv = cek_tl / kur if kur > 0 else 0
+    cek_toplam_usd = cek_tl_usd_eqv + cek_usd
+
+    # ─── Manuel Kalemler ───
+    manuel_kalemler = aktif_manuel_listele(aktif_kul)
+    manuel_ekle_toplam = 0.0
+    manuel_cikar_toplam = 0.0
+    for k in manuel_kalemler:
+        try:
+            tutar = float(k.get("tutar") or 0)
+            pb = (k.get("para_birimi") or "USD").upper()
+            tutar_usd = tutar if pb == "USD" else (tutar / kur if kur > 0 else 0)
+            if k.get("tip") == "ekle":
+                manuel_ekle_toplam += tutar_usd
+            else:
+                manuel_cikar_toplam += tutar_usd
+        except (TypeError, ValueError):
+            pass
+
     # TOPLAM AKTİFLER
     toplam_aktif = (
         stok_marjli
         + pazaryeri_toplam_kdvli
         + odenen_ithalat
         + banka_usd_eqv
+        + manuel_ekle_toplam
         - usd_borc
         - tl_borc_usd
         - eur_borc_usd
+        - cek_toplam_usd
+        - manuel_cikar_toplam
     )
 
     # ─── Sonuç Kartı ───
@@ -3534,8 +3587,83 @@ elif sayfa == "💰 Toplam Aktifler":
     detay_html += f'<div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #F59E0B;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700;color:#0F172A">🏦 Banka Hesapları (USD eşdeğeri)</div><div style="font-size:11px;color:#64748B;margin-top:2px">USD: ${fmt(banka_usd)} + TL: ₺{fmt(banka_tl)} ÷ {kur}</div></div><div style="font-size:18px;font-weight:700;color:#B45309;font-family:monospace">+${fmt(banka_usd_eqv)}</div></div>'
     if usd_borc or tl_borc or eur_borc:
         detay_html += f'<div style="background:#FEF2F2;border:1px solid #FCA5A5;border-left:4px solid #DC2626;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#991B1B">⚠️ Cari Borçlar</div><div style="font-size:11px;color:#B91C1C;margin-top:2px">{borc_detay_str}</div></div><div style="font-size:18px;font-weight:700;color:#7F1D1D;font-family:monospace;margin-left:14px">-${fmt(toplam_borc_usd)}</div></div>'
+    # Çekler kartı
+    if cek_tl > 0 or cek_usd > 0:
+        cek_detay_arr = []
+        if cek_tl > 0: cek_detay_arr.append(f"TL: ₺{cek_tl:,.0f} ({cek_adet_tl} çek, ${cek_tl_usd_eqv:,.0f})")
+        if cek_usd > 0: cek_detay_arr.append(f"USD: ${cek_usd:,.0f} ({cek_adet_usd} çek)")
+        cek_detay_str = " · ".join(cek_detay_arr)
+        detay_html += f'<div style="background:#FEF3C7;border:1px solid #FDE68A;border-left:4px solid #D97706;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#78350F">📋 Sistemdeki Çekler</div><div style="font-size:11px;color:#92400E;margin-top:2px">{cek_detay_str}</div></div><div style="font-size:18px;font-weight:700;color:#78350F;font-family:monospace;margin-left:14px">-${fmt(cek_toplam_usd)}</div></div>'
+    # Manuel eklemeler kartı
+    if manuel_ekle_toplam > 0:
+        ekle_kalemler = [k for k in manuel_kalemler if k.get("tip") == "ekle"]
+        ekle_detay = " · ".join([f"{k.get('aciklama','?')[:25]}: {('$' if (k.get('para_birimi') or 'USD').upper() == 'USD' else '₺')}{float(k.get('tutar') or 0):,.0f}" for k in ekle_kalemler[:3]])
+        if len(ekle_kalemler) > 3: ekle_detay += f" +{len(ekle_kalemler)-3} kalem"
+        detay_html += f'<div style="background:#ECFDF5;border:1px solid #A7F3D0;border-left:4px solid #059669;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#065F46">➕ Manuel Eklemeler</div><div style="font-size:11px;color:#047857;margin-top:2px">{ekle_detay}</div></div><div style="font-size:18px;font-weight:700;color:#065F46;font-family:monospace;margin-left:14px">+${fmt(manuel_ekle_toplam)}</div></div>'
+    # Manuel çıkarmalar kartı
+    if manuel_cikar_toplam > 0:
+        cikar_kalemler = [k for k in manuel_kalemler if k.get("tip") == "cikar"]
+        cikar_detay = " · ".join([f"{k.get('aciklama','?')[:25]}: {('$' if (k.get('para_birimi') or 'USD').upper() == 'USD' else '₺')}{float(k.get('tutar') or 0):,.0f}" for k in cikar_kalemler[:3]])
+        if len(cikar_kalemler) > 3: cikar_detay += f" +{len(cikar_kalemler)-3} kalem"
+        detay_html += f'<div style="background:#FEE2E2;border:1px solid #FCA5A5;border-left:4px solid #DC2626;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#991B1B">➖ Manuel Çıkarmalar</div><div style="font-size:11px;color:#B91C1C;margin-top:2px">{cikar_detay}</div></div><div style="font-size:18px;font-weight:700;color:#7F1D1D;font-family:monospace;margin-left:14px">-${fmt(manuel_cikar_toplam)}</div></div>'
     detay_html += '</div>'
     st.markdown(detay_html, unsafe_allow_html=True)
+
+    # ─── Manuel Ekleme/Çıkarma ───
+    st.markdown("---")
+    st.markdown("### ✏️ Manuel Ekleme / Çıkarma")
+    st.caption("Excel'lerde olmayan ek kalemler için manuel giriş yap. Kayıtlar kalıcıdır.")
+
+    with st.expander("➕ Yeni Kalem Ekle", expanded=False):
+        col_t, col_a, col_tu, col_pb, col_b = st.columns([1, 3, 1.5, 1, 1])
+        with col_t:
+            yeni_tip = st.selectbox("Tip", ["ekle", "cikar"],
+                                     format_func=lambda x: "➕ Ekle" if x == "ekle" else "➖ Çıkar",
+                                     key="manuel_tip")
+        with col_a:
+            yeni_aciklama = st.text_input("Açıklama", key="manuel_aciklama",
+                                           placeholder="Örn: Kasa nakit, Yatırım fonu, Henüz fatura kesilmemiş alacak")
+        with col_tu:
+            yeni_tutar = st.number_input("Tutar", min_value=0.0, step=0.01, format="%.2f", key="manuel_tutar")
+        with col_pb:
+            yeni_pb = st.selectbox("PB", ["USD", "TL"], key="manuel_pb")
+        with col_b:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("💾 Ekle", type="primary", use_container_width=True, key="manuel_kaydet"):
+                if not yeni_aciklama.strip():
+                    st.error("Açıklama boş olamaz")
+                elif yeni_tutar <= 0:
+                    st.error("Tutar 0'dan büyük olmalı")
+                else:
+                    if aktif_manuel_ekle(aktif_kul, yeni_aciklama.strip(), yeni_tutar, yeni_pb, yeni_tip):
+                        st.success("✅ Kalem eklendi")
+                        st.rerun()
+                    else:
+                        st.error("❌ Kayıt başarısız (Supabase tablosu eksik olabilir)")
+
+    # Mevcut kalemleri listele
+    if manuel_kalemler:
+        st.markdown(f"**📋 Kayıtlı Kalemler ({len(manuel_kalemler)})**")
+        for k in manuel_kalemler:
+            tip = k.get("tip", "ekle")
+            renk = "#16A34A" if tip == "ekle" else "#DC2626"
+            isaret = "+" if tip == "ekle" else "-"
+            sembol = "$" if (k.get("para_birimi") or "USD").upper() == "USD" else "₺"
+            tutar_v = float(k.get("tutar") or 0)
+            col_a, col_b = st.columns([10, 1])
+            with col_a:
+                st.markdown(
+                    f'<div style="background:white;border:1px solid #E2E8F0;border-left:3px solid {renk};border-radius:8px;padding:10px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">'
+                    f'<div><b style="color:#0F172A;font-size:13px">{k.get("aciklama","")}</b><div style="font-size:10px;color:#94A3B8">📅 {(k.get("olusturuldu") or "")[:10]}</div></div>'
+                    f'<div style="color:{renk};font-weight:700;font-family:monospace;font-size:14px">{isaret}{sembol}{tutar_v:,.2f}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+            with col_b:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("🗑️", key=f"manuel_sil_{k['id']}", help="Sil"):
+                    aktif_manuel_sil(k['id'])
+                    st.rerun()
 
     # ─── Eksik dosya uyarıları ───
     st.markdown("---")
@@ -3551,10 +3679,12 @@ elif sayfa == "💰 Toplam Aktifler":
 
     # ─── Temizleme ───
     with st.expander("🗑️ Yüklenen verileri temizle"):
-        if st.button("Tüm Excel verilerini sıfırla"):
+        st.warning("⚠️ Bu işlem **kalıcı kayıtları da siler**. Yeniden Excel yüklemeniz gerekir.")
+        if st.button("Tüm Excel verilerini sıfırla", type="secondary"):
             st.session_state.aktif_stok_data = None
             st.session_state.aktif_ithalat_data = None
             st.session_state.aktif_cari_data = None
+            aktif_excel_sil(aktif_kul)  # Supabase'ten de sil
             st.success("Temizlendi.")
             st.rerun()
 

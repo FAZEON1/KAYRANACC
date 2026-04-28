@@ -257,52 +257,11 @@ def odeme_sil(odeme_id):
 
 
 def odeme_vade_guncelle(odeme_id, yeni_vade):
-    """
-    Ödemenin vade tarihini günceller.
-    İlk değişiklikte orijinal_vade kaydedilir, ertelendi_sayisi artırılır.
-    Kolonlar yoksa sessizce atlanır (sadece vade güncellenir).
-    """
+    """Sadece vadeyi günceller. Erteleme tracking app.py'de session_state ile yapılır."""
     sb = get_client()
     vade_str = yeni_vade.isoformat() if hasattr(yeni_vade, "isoformat") else str(yeni_vade)
-
-    # Mevcut ödeme bilgisini al
-    try:
-        mevcut = sb.table("odemeler").select("*").eq("id", odeme_id).execute()
-        if not mevcut.data:
-            return
-        odeme = mevcut.data[0]
-    except Exception:
-        return
-
-    eski_vade = odeme.get("vade")
-
-    # 1) Vadeyi her zaman güncelle (en kritik adım)
     try:
         sb.table("odemeler").update({"vade": vade_str}).eq("id", odeme_id).execute()
-    except Exception:
-        return  # vade bile güncellenemediyse fonksiyon başarısız
-
-    # Vade gerçekten değişti mi?
-    if eski_vade and str(eski_vade)[:10] == vade_str[:10]:
-        return  # aynı tarih, erteleme tracking'e gerek yok
-
-    # 2) orijinal_vade kolonu - ilk defa erteleniyorsa doldur
-    try:
-        if not odeme.get("orijinal_vade"):
-            sb.table("odemeler").update({"orijinal_vade": eski_vade}).eq("id", odeme_id).execute()
-    except Exception:
-        pass  # kolon yoksa sessizce geç
-
-    # 3) ertelendi_sayisi kolonu - artır
-    try:
-        yeni_sayi = (odeme.get("ertelendi_sayisi") or 0) + 1
-        sb.table("odemeler").update({"ertelendi_sayisi": yeni_sayi}).eq("id", odeme_id).execute()
-    except Exception:
-        pass
-
-    # 4) son_erteleme_tarih kolonu
-    try:
-        sb.table("odemeler").update({"son_erteleme_tarih": date.today().isoformat()}).eq("id", odeme_id).execute()
     except Exception:
         pass
 
@@ -592,3 +551,125 @@ def virman_geri_al(virman_id):
         return True, "✅ Virman geri alındı"
     except Exception as e:
         return False, f"Geri alma hatası: {e}"
+
+
+# ════════════════════════════════════════════════════════════════════
+# AKTİF EXCEL VERİLERİ (Toplam Aktifler sayfası için kalıcı kayıt)
+# ════════════════════════════════════════════════════════════════════
+def aktif_excel_kaydet(kullanici, dosya_tipi, veri_json):
+    """
+    Excel parse sonuçlarını Supabase'e kaydeder.
+    dosya_tipi: 'stok' | 'ithalat' | 'cari'
+    veri_json: parse edilmiş veri (dict/list)
+    """
+    sb = get_client()
+    try:
+        # Önce eski kaydı sil (UPSERT mantığı)
+        sb.table("aktif_excel_verileri").delete().eq("kullanici", kullanici).eq("dosya_tipi", dosya_tipi).execute()
+        # Yeni kayıt ekle
+        import json
+        sb.table("aktif_excel_verileri").insert({
+            "kullanici": kullanici,
+            "dosya_tipi": dosya_tipi,
+            "veri_json": json.dumps(veri_json),
+        }).execute()
+        return True
+    except Exception:
+        return False
+
+
+def aktif_excel_oku(kullanici, dosya_tipi):
+    """Kaydedilmiş Excel verisini okur. Yoksa None döner."""
+    sb = get_client()
+    try:
+        res = sb.table("aktif_excel_verileri").select("*").eq("kullanici", kullanici).eq("dosya_tipi", dosya_tipi).execute()
+        if res.data:
+            import json
+            return json.loads(res.data[0]["veri_json"])
+        return None
+    except Exception:
+        return None
+
+
+def aktif_excel_sil(kullanici, dosya_tipi=None):
+    """Excel verilerini siler. dosya_tipi None ise tümünü siler."""
+    sb = get_client()
+    try:
+        q = sb.table("aktif_excel_verileri").delete().eq("kullanici", kullanici)
+        if dosya_tipi:
+            q = q.eq("dosya_tipi", dosya_tipi)
+        q.execute()
+        return True
+    except Exception:
+        return False
+
+
+# ════════════════════════════════════════════════════════════════════
+# TOPLAM AKTİF MANUEL DÜZELTMELERİ
+# ════════════════════════════════════════════════════════════════════
+def aktif_manuel_ekle(kullanici, aciklama, tutar, para_birimi="USD", tip="ekle"):
+    """
+    Manuel ekleme/çıkarma kaydı yapar.
+    tip: 'ekle' (toplam aktife ekle) | 'cikar' (toplam aktiften çıkar)
+    """
+    sb = get_client()
+    try:
+        sb.table("aktif_manuel_kalemler").insert({
+            "kullanici": kullanici,
+            "aciklama": aciklama,
+            "tutar": float(tutar),
+            "para_birimi": para_birimi,
+            "tip": tip,
+        }).execute()
+        return True
+    except Exception:
+        return False
+
+
+def aktif_manuel_listele(kullanici):
+    """Kullanıcının manuel kalemlerini döndürür."""
+    sb = get_client()
+    try:
+        res = sb.table("aktif_manuel_kalemler").select("*").eq("kullanici", kullanici).order("id", desc=True).execute()
+        return res.data or []
+    except Exception:
+        return []
+
+
+def aktif_manuel_sil(kalem_id):
+    """Bir manuel kalemi sil."""
+    sb = get_client()
+    try:
+        sb.table("aktif_manuel_kalemler").delete().eq("id", kalem_id).execute()
+        return True
+    except Exception:
+        return False
+
+
+def get_cek_toplamlari():
+    """
+    Sistemdeki tüm çeklerin (henüz ödenmemiş) toplamını para birimine göre döndürür.
+    Returns: (toplam_tl, toplam_usd, adet_tl, adet_usd)
+    """
+    sb = get_client()
+    try:
+        res = sb.table("cekler").select("*").execute()
+        toplam_tl = 0.0
+        toplam_usd = 0.0
+        adet_tl = 0
+        adet_usd = 0
+        for c in res.data or []:
+            try:
+                meblag = float(c.get("meblagh") or c.get("meblag") or 0)
+                pb = (c.get("para_birimi") or "TL").upper().strip()
+                if pb == "USD":
+                    toplam_usd += meblag
+                    adet_usd += 1
+                else:  # TL veya boş
+                    toplam_tl += meblag
+                    adet_tl += 1
+            except (TypeError, ValueError):
+                pass
+        return toplam_tl, toplam_usd, adet_tl, adet_usd
+    except Exception:
+        return 0.0, 0.0, 0, 0
