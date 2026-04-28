@@ -648,7 +648,13 @@ def aktif_manuel_sil(kalem_id):
 
 def get_cek_toplamlari():
     """
-    Sistemdeki tüm çeklerin (henüz ödenmemiş) toplamını para birimine göre döndürür.
+    Sistemdeki TAHSİL EDİLMEMİŞ (henüz nakde çevrilmemiş) çeklerin
+    para birimine göre kalan tutarlarını ve adetlerini döndürür.
+
+    Mantık:
+    - "kalan" sütunu var → onu kullan (en doğru: meblagh - odenen)
+    - "kalan" yoksa veya 0 ise → "meblagh - odenen" hesapla
+    - Eğer durum "Ödendi" / "Tahsil Edildi" / "Iptal" gibi ise → DAHİL ETME
     Returns: (toplam_tl, toplam_usd, adet_tl, adet_usd)
     """
     sb = get_client()
@@ -660,13 +666,30 @@ def get_cek_toplamlari():
         adet_usd = 0
         for c in res.data or []:
             try:
-                meblag = float(c.get("meblagh") or c.get("meblag") or 0)
+                # Tahsil edilmiş/iptal çekleri atla
+                durum = (c.get("durum") or "").strip().upper()
+                if durum in ("ÖDENDİ", "ODENDI", "TAHSIL EDİLDİ", "TAHSIL EDILDI",
+                             "TAHSİL", "TAHSIL", "İPTAL", "IPTAL", "PORTFÖYDEN ÇIKTI"):
+                    continue
+
+                # Kalan tutarı hesapla (önce kolon, yoksa meblagh - odenen)
+                kalan = c.get("kalan")
+                if kalan is None or float(kalan or 0) == 0:
+                    meblag = float(c.get("meblagh") or c.get("meblag") or 0)
+                    odenen = float(c.get("odenen") or 0)
+                    kalan_v = meblag - odenen
+                else:
+                    kalan_v = float(kalan)
+
+                if kalan_v <= 0:
+                    continue  # tamamen ödenmiş çek
+
                 pb = (c.get("para_birimi") or "TL").upper().strip()
                 if pb == "USD":
-                    toplam_usd += meblag
+                    toplam_usd += kalan_v
                     adet_usd += 1
-                else:  # TL veya boş
-                    toplam_tl += meblag
+                else:
+                    toplam_tl += kalan_v
                     adet_tl += 1
             except (TypeError, ValueError):
                 pass

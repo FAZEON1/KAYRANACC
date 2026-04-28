@@ -3590,10 +3590,12 @@ elif sayfa == "💰 Toplam Aktifler":
     # Çekler kartı
     if cek_tl > 0 or cek_usd > 0:
         cek_detay_arr = []
-        if cek_tl > 0: cek_detay_arr.append(f"TL: ₺{cek_tl:,.0f} ({cek_adet_tl} çek, ${cek_tl_usd_eqv:,.0f})")
-        if cek_usd > 0: cek_detay_arr.append(f"USD: ${cek_usd:,.0f} ({cek_adet_usd} çek)")
+        if cek_tl > 0:
+            cek_detay_arr.append(f"TL kalan: ₺{cek_tl:,.2f} ({cek_adet_tl} çek) → ${cek_tl_usd_eqv:,.2f}")
+        if cek_usd > 0:
+            cek_detay_arr.append(f"USD kalan: ${cek_usd:,.2f} ({cek_adet_usd} çek)")
         cek_detay_str = " · ".join(cek_detay_arr)
-        detay_html += f'<div style="background:#FEF3C7;border:1px solid #FDE68A;border-left:4px solid #D97706;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#78350F">📋 Sistemdeki Çekler</div><div style="font-size:11px;color:#92400E;margin-top:2px">{cek_detay_str}</div></div><div style="font-size:18px;font-weight:700;color:#78350F;font-family:monospace;margin-left:14px">-${fmt(cek_toplam_usd)}</div></div>'
+        detay_html += f'<div style="background:#FEF3C7;border:1px solid #FDE68A;border-left:4px solid #D97706;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#78350F">📋 Sistemdeki Çekler (tahsil edilmemiş kalan)</div><div style="font-size:11px;color:#92400E;margin-top:2px">{cek_detay_str}</div></div><div style="font-size:18px;font-weight:700;color:#78350F;font-family:monospace;margin-left:14px">-${fmt(cek_toplam_usd)}</div></div>'
     # Manuel eklemeler kartı
     if manuel_ekle_toplam > 0:
         ekle_kalemler = [k for k in manuel_kalemler if k.get("tip") == "ekle"]
