@@ -11,7 +11,7 @@ from database import (
     initialize_db, get_tum_haftalar, get_aktif_hafta,
     hafta_ekle, hafta_aktif_yap, hafta_sil,
     get_hafta_odemeler, odeme_ekle_bulk, odeme_ekle_manuel,
-    odeme_durum_guncelle, odeme_sil, odeme_vade_guncelle, odeme_tutar_guncelle, get_hafta_ozet,
+    odeme_durum_guncelle, odeme_sil, odeme_vade_guncelle, odeme_tutar_guncelle, odeme_kategori_guncelle, get_hafta_ozet,
     get_bankalar, banka_ekle, banka_guncelle, banka_sil,
     get_cekler, cek_ekle_bulk, cek_sil, cek_sil_hepsi,
     get_ertelenen_odemeler, get_virmanlar, virman_yap, virman_geri_al,
@@ -1837,7 +1837,7 @@ elif sayfa == "💳 Bu Hafta":
                     )
 
                 with col4:
-                    col4a, col4b = st.columns([4, 1])
+                    col4a, col4b, col4c = st.columns([4, 1, 1])
                     with col4a:
                         if o.get("tutar_tl"):
                             st.markdown(f'<b style="color:#065F46;font-size:14px">₺{fmt(o["tutar_tl"])}</b>', unsafe_allow_html=True)
@@ -1852,8 +1852,23 @@ elif sayfa == "💳 Bu Hafta":
                                     st.session_state[edit_key] = False
                                     st.rerun()
                             else:
-                                if st.button("✏️", key=f"open_edit_{o['id']}", help="Tutarı revize et"):
+                                if st.button("✏️", key=f"open_edit_{o['id']}", help="Tutar / kategoriyi düzenle"):
                                     st.session_state[edit_key] = True
+                                    st.rerun()
+                    with col4c:
+                        if not is_odendi:
+                            # Silme onay sistemi
+                            sil_key = f"sil_onay_{o['id']}"
+                            if st.session_state.get(sil_key, False):
+                                # Onay aşaması: ✔️ tıkla = sil, başka yere tık = iptal
+                                if st.button("✔️", key=f"sil_confirm_{o['id']}", help="EVET, KALICI OLARAK SİL", type="primary"):
+                                    odeme_sil(o["id"])
+                                    st.session_state[sil_key] = False
+                                    st.toast(f"🗑️ '{o.get('firma','')[:30]}' silindi", icon="✅")
+                                    st.rerun()
+                            else:
+                                if st.button("🗑️", key=f"sil_btn_{o['id']}", help="Bu ödemeyi sil"):
+                                    st.session_state[sil_key] = True
                                     st.rerun()
 
                 with col5:
@@ -1871,15 +1886,15 @@ elif sayfa == "💳 Bu Hafta":
                             odeme_durum_guncelle(o["id"], "odendi", banka_id, kur)
                             st.rerun()
 
-                # ─── Tutar Revize Etme (sadece bekleyenler için) ───
+                # ─── Tutar + Kategori Revize Etme (sadece bekleyenler için) ───
                 if not is_odendi and st.session_state.get(f"edit_tutar_toggle_{o['id']}", False):
                     st.markdown(
                         '<div style="background:#FEF3C7;border:1px solid #FCD34D;'
                         'border-radius:10px;padding:12px 16px;margin:4px 0 8px 24px;">'
-                        '<b style="color:#92400E;font-size:12px">💰 Tutar Revize</b>',
+                        '<b style="color:#92400E;font-size:12px">💰 Tutar / Kategori Revize</b>',
                         unsafe_allow_html=True
                     )
-                    col_tl, col_usd, col_kaydet = st.columns([2, 2, 1])
+                    col_tl, col_usd, col_kat, col_kaydet = st.columns([2, 2, 2, 1])
                     with col_tl:
                         yeni_tl = st.number_input(
                             "TL (₺)",
@@ -1898,10 +1913,24 @@ elif sayfa == "💳 Bu Hafta":
                             format="%.2f",
                             key=f"edit_usd_{o['id']}"
                         )
+                    with col_kat:
+                        # Kategori seçimi
+                        kat_keys = list(KATEGORILER.keys())
+                        mevcut_kat = o.get("kategori") or "diger"
+                        try:
+                            kat_idx = kat_keys.index(mevcut_kat)
+                        except ValueError:
+                            kat_idx = kat_keys.index("diger")
+                        yeni_kat = st.selectbox(
+                            "Kategori",
+                            kat_keys,
+                            index=kat_idx,
+                            format_func=lambda k: KATEGORILER.get(k, {}).get("label", k),
+                            key=f"edit_kat_{o['id']}"
+                        )
                     with col_kaydet:
                         st.markdown("<br>", unsafe_allow_html=True)
                         if st.button("💾 Kaydet", key=f"save_tutar_{o['id']}", type="primary", use_container_width=True):
-                            # İki alan aynı anda 0 ise hata ver
                             if yeni_tl <= 0 and yeni_usd <= 0:
                                 st.error("En az bir tutar (TL veya USD) 0'dan büyük olmalı.")
                             else:
@@ -1910,8 +1939,11 @@ elif sayfa == "💳 Bu Hafta":
                                     tutar_tl=yeni_tl,
                                     tutar_usd=yeni_usd
                                 )
+                                # Kategori değiştiyse onu da güncelle
+                                if yeni_kat != mevcut_kat:
+                                    odeme_kategori_guncelle(o["id"], yeni_kat)
                                 st.session_state[f"edit_tutar_toggle_{o['id']}"] = False
-                                st.success(f"✅ Tutar güncellendi")
+                                st.success(f"✅ Güncellendi")
                                 st.rerun()
                     st.markdown('</div>', unsafe_allow_html=True)
 

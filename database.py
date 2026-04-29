@@ -309,6 +309,16 @@ def odeme_tutar_guncelle(odeme_id, tutar_tl=None, tutar_usd=None):
     sb.table("odemeler").update(update_data).eq("id", odeme_id).execute()
 
 
+def odeme_kategori_guncelle(odeme_id, yeni_kategori):
+    """Ödemenin kategorisini günceller."""
+    sb = get_client()
+    try:
+        sb.table("odemeler").update({"kategori": yeni_kategori}).eq("id", odeme_id).execute()
+        return True
+    except Exception:
+        return False
+
+
 # ════════════════════════════════════════════════════════════════════
 # BANKALAR
 # ════════════════════════════════════════════════════════════════════
