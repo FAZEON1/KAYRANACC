@@ -1221,7 +1221,9 @@ with st.sidebar:
 
     # ─── Sayfa listesi (kullanıcıya göre dinamik) ───
     aktif_kullanici_lower = st.session_state.get("aktif_kullanici", "").lower().strip()
-    SADECE_IBRAHIM_SAYFALARI = ["💰 Toplam Aktifler"]
+    # Toplam Aktifler sayfasına yetkili kullanıcılar (yeni eklemek için bu set'e ekle)
+    YETKILI_KULLANICILAR_TOPLAM_AKTIFLER = {"ibrahim", "cem"}
+    KISITLI_SAYFALAR = ["💰 Toplam Aktifler"]
 
     tum_sayfalar = [
         "📊 Dashboard",
@@ -1239,9 +1241,9 @@ with st.sidebar:
         "🔔 Bildirim Ayarları",
     ]
 
-    # Eğer kullanıcı ibrahim değilse, kısıtlı sayfaları menüden çıkar
-    if aktif_kullanici_lower != "ibrahim":
-        gosterilen_sayfalar = [s for s in tum_sayfalar if s not in SADECE_IBRAHIM_SAYFALARI]
+    # Yetkili olmayan kullanıcılar için kısıtlı sayfaları menüden çıkar
+    if aktif_kullanici_lower not in YETKILI_KULLANICILAR_TOPLAM_AKTIFLER:
+        gosterilen_sayfalar = [s for s in tum_sayfalar if s not in KISITLI_SAYFALAR]
     else:
         gosterilen_sayfalar = tum_sayfalar
 
@@ -3286,9 +3288,10 @@ ALTER TABLE odemeler ADD COLUMN IF NOT EXISTS son_erteleme_tarih DATE;""", langu
 # 13) TOPLAM AKTİFLER
 # ════════════════════════════════════════════════════════════════════
 elif sayfa == "💰 Toplam Aktifler":
-    # ─── Yetki kontrolü: Sadece ibrahim erişebilir ───
+    # ─── Yetki kontrolü: Sadece yetkili kullanıcılar erişebilir ───
     aktif_kul = st.session_state.get("aktif_kullanici", "").lower().strip()
-    if aktif_kul != "ibrahim":
+    YETKILI_TOPLAM_AKTIFLER = {"ibrahim", "cem"}
+    if aktif_kul not in YETKILI_TOPLAM_AKTIFLER:
         st.error("🔒 Bu sayfaya erişim yetkiniz yok.")
         st.stop()
 
