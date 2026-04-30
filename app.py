@@ -3296,7 +3296,7 @@ elif sayfa == "💰 Toplam Aktifler":
         st.stop()
 
     st.markdown('<div class="baslik">💰 Toplam Aktifler</div>', unsafe_allow_html=True)
-    st.markdown('<div class="alt-baslik">Stok + Pazaryeri + Yoldaki Mal + Banka − Borçlar (USD)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="alt-baslik">Stok + Yoldaki Mal + Banka + Alacaklar − Borçlar − Çekler (USD)</div>', unsafe_allow_html=True)
 
     kur = get_kur()
 
@@ -3426,17 +3426,20 @@ elif sayfa == "💰 Toplam Aktifler":
 
     def parse_cari_excel(file_bytes):
         """
-        Cari alacaklar Excel'inden borçları çıkar.
+        Cari Excel'inden BORÇ ve ALACAK kalemlerini çıkarır.
         Sütun yapısı: 0=Tip, 1=Kod, 2=Hesap adı, 3=Döviz, 4=Borç, 5=Alacak, 6=Bakiye
-        Negatif bakiye = SEN borçlusun.
+        - Negatif bakiye = SEN borçlusun (BORÇ)
+        - Pozitif bakiye = SANA borçlu (ALACAK)
+        Returns: dict{'borc': {usd, tl, eur}, 'alacak': {usd, tl, eur}}
         """
         import pandas as pd
         from io import BytesIO
         df = pd.read_excel(BytesIO(file_bytes), header=None)
 
-        usd_borc = 0.0
-        tl_borc = 0.0
-        eur_borc = 0.0
+        sonuc = {
+            "borc": {"usd": 0.0, "tl": 0.0, "eur": 0.0},
+            "alacak": {"usd": 0.0, "tl": 0.0, "eur": 0.0},
+        }
         for i in range(1, len(df)):
             tip = df.iloc[i, 0]
             doviz = df.iloc[i, 3]
@@ -3444,17 +3447,19 @@ elif sayfa == "💰 Toplam Aktifler":
             if pd.notna(tip) and pd.notna(bakiye) and pd.notna(doviz):
                 try:
                     bakiye_val = float(bakiye)
-                    if bakiye_val < 0:
-                        d = str(doviz).strip().upper()
-                        if d == "USD":
-                            usd_borc += abs(bakiye_val)
-                        elif d == "TL":
-                            tl_borc += abs(bakiye_val)
-                        elif d == "EUR":
-                            eur_borc += abs(bakiye_val)
+                    if bakiye_val == 0:
+                        continue
+                    yon = "borc" if bakiye_val < 0 else "alacak"
+                    d = str(doviz).strip().upper()
+                    if d == "USD":
+                        sonuc[yon]["usd"] += abs(bakiye_val)
+                    elif d == "TL":
+                        sonuc[yon]["tl"] += abs(bakiye_val)
+                    elif d == "EUR":
+                        sonuc[yon]["eur"] += abs(bakiye_val)
                 except (ValueError, TypeError):
                     pass
-        return usd_borc, tl_borc, eur_borc
+        return sonuc
 
     # ─── Session state init + Supabase'den önceki kayıtları yükle ───
     aktif_kul = (st.session_state.get("aktif_kullanici") or "ibrahim").lower().strip()
@@ -3552,8 +3557,17 @@ elif sayfa == "💰 Toplam Aktifler":
         st.markdown("**3️⃣ Cari Alacaklar Listesi**")
         if st.session_state.aktif_cari_data:
             try:
-                usd_b, tl_b, eur_b = st.session_state.aktif_cari_data
-                st.success(f"✅ Önceki yüklenmiş: ${float(usd_b):,.0f} USD borç")
+                cari = st.session_state.aktif_cari_data
+                # Yeni dict format
+                if isinstance(cari, dict) and "borc" in cari:
+                    b_usd = float(cari.get("borc", {}).get("usd") or 0)
+                    a_usd = float(cari.get("alacak", {}).get("usd") or 0)
+                    st.success(f"✅ Önceki: Borç ${b_usd:,.0f} | Alacak ${a_usd:,.0f}")
+                # Eski tuple/list format
+                elif isinstance(cari, (tuple, list)) and len(cari) == 3:
+                    st.success(f"✅ Önceki yüklenmiş: ${float(cari[0]):,.0f} USD borç (eski format)")
+                else:
+                    st.session_state.aktif_cari_data = None
             except Exception:
                 st.session_state.aktif_cari_data = None
         cari_file = st.file_uploader("Cari Excel", type=["xls", "xlsx"], key="aktif_cari_upload", label_visibility="collapsed")
@@ -3562,7 +3576,8 @@ elif sayfa == "💰 Toplam Aktifler":
                 parsed = parse_cari_excel(cari_file.read())
                 st.session_state.aktif_cari_data = parsed
                 try:
-                    aktif_excel_kaydet(aktif_kul, "cari", list(parsed))
+                    # Dict olarak kaydet (JSON serializable)
+                    aktif_excel_kaydet(aktif_kul, "cari", parsed)
                 except Exception:
                     pass
                 st.success(f"✅ {cari_file.name}")
@@ -3592,34 +3607,42 @@ elif sayfa == "💰 Toplam Aktifler":
     # %15 marj eklenmiş + %20 KDV dahil stok (formül: değer / 0.85 × 1.20)
     stok_marjli = (usd_stok / 0.85) * 1.20 if usd_stok else 0
 
-    # Pazaryeri toplam (%20 KDV dahil) - değerleri güvenli float'a çevir
-    pazaryeri_toplam_ham = 0.0
-    for v in pazaryerleri.values():
-        try:
-            pazaryeri_toplam_ham += float(v or 0)
-        except (TypeError, ValueError):
-            pass
-    pazaryeri_toplam_kdvli = pazaryeri_toplam_ham * 1.20
-
     # İthalat
     try:
         odenen_ithalat = float(st.session_state.aktif_ithalat_data or 0)
     except (TypeError, ValueError):
         odenen_ithalat = 0.0
 
-    # Borçlar
-    usd_borc, tl_borc, eur_borc = 0.0, 0.0, 0.0
+    # Cari Borçlar ve Alacaklar
+    usd_borc = tl_borc = eur_borc = 0.0
+    usd_alacak = tl_alacak = eur_alacak = 0.0
     try:
         if st.session_state.aktif_cari_data:
             cari = st.session_state.aktif_cari_data
-            if isinstance(cari, (tuple, list)) and len(cari) == 3:
+            # Yeni format: dict{'borc': {...}, 'alacak': {...}}
+            if isinstance(cari, dict) and "borc" in cari:
+                b = cari.get("borc") or {}
+                a = cari.get("alacak") or {}
+                usd_borc = float(b.get("usd") or 0)
+                tl_borc = float(b.get("tl") or 0)
+                eur_borc = float(b.get("eur") or 0)
+                usd_alacak = float(a.get("usd") or 0)
+                tl_alacak = float(a.get("tl") or 0)
+                eur_alacak = float(a.get("eur") or 0)
+            # Eski format: tuple/list (sadece borçlar) - geriye dönük uyumluluk
+            elif isinstance(cari, (tuple, list)) and len(cari) == 3:
                 usd_borc = float(cari[0] or 0)
                 tl_borc = float(cari[1] or 0)
                 eur_borc = float(cari[2] or 0)
     except Exception:
-        usd_borc, tl_borc, eur_borc = 0.0, 0.0, 0.0
+        usd_borc = tl_borc = eur_borc = 0.0
+        usd_alacak = tl_alacak = eur_alacak = 0.0
+
     tl_borc_usd = tl_borc / kur if kur > 0 else 0
-    eur_borc_usd = eur_borc * (1.10) if eur_borc > 0 else 0  # tahmini EUR/USD ~1.10
+    eur_borc_usd = eur_borc * 1.10 if eur_borc > 0 else 0
+    tl_alacak_usd = tl_alacak / kur if kur > 0 else 0
+    eur_alacak_usd = eur_alacak * 1.10 if eur_alacak > 0 else 0
+    toplam_alacak_usd = usd_alacak + tl_alacak_usd + eur_alacak_usd
 
     # ─── Çekler (Sistemden) ───
     cek_tl, cek_usd, cek_adet_tl, cek_adet_usd = get_cek_toplamlari()
@@ -3660,9 +3683,9 @@ elif sayfa == "💰 Toplam Aktifler":
     # TOPLAM AKTİFLER
     toplam_aktif = (
         stok_marjli
-        + pazaryeri_toplam_kdvli
         + odenen_ithalat
         + banka_usd_eqv
+        + toplam_alacak_usd
         + manuel_ekle_toplam
         - usd_borc
         - tl_borc_usd
@@ -3691,20 +3714,21 @@ elif sayfa == "💰 Toplam Aktifler":
     toplam_borc_usd = usd_borc + tl_borc_usd + eur_borc_usd
     borc_detay_str = " · ".join(borc_detay_arr) if borc_detay_arr else ""
 
-    # Pazaryeri detayı
-    pazaryeri_detay = ""
-    if pazaryerleri:
-        try:
-            pazaryeri_detay = "<br>" + " · ".join([f"{k}: ${float(v or 0):,.0f}" for k, v in pazaryerleri.items()])
-        except Exception:
-            pazaryeri_detay = ""
+    # Cari alacak detay
+    alacak_detay_arr = []
+    if usd_alacak: alacak_detay_arr.append(f"USD alacak: ${usd_alacak:,.0f}")
+    if tl_alacak: alacak_detay_arr.append(f"TL alacak: ₺{tl_alacak:,.0f} (${tl_alacak_usd:,.0f})")
+    if eur_alacak: alacak_detay_arr.append(f"EUR alacak: €{eur_alacak:,.0f}")
+    alacak_detay_str = " · ".join(alacak_detay_arr) if alacak_detay_arr else ""
 
     # HTML — tek satırlık inline div'ler, boş satır YOK
     detay_html = '<div style="display:flex;flex-direction:column;gap:8px">'
     detay_html += f'<div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #3B82F6;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700;color:#0F172A">📦 G5F Stok Değeri (marj eklenmiş + KDV dahil)</div><div style="font-size:11px;color:#64748B;margin-top:2px">Ham stok: ${fmt(usd_stok)} ÷ 0.85 (kar marjı) × 1.20 (KDV)</div></div><div style="font-size:18px;font-weight:700;color:#1D4ED8;font-family:monospace">+${fmt(stok_marjli)}</div></div>'
-    detay_html += f'<div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #10B981;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#0F172A">🛒 Müşteri Stokları (KDV %20 dahil)</div><div style="font-size:11px;color:#64748B;margin-top:2px">Ham toplam: ${fmt(pazaryeri_toplam_ham)} × 1.20{pazaryeri_detay}</div></div><div style="font-size:18px;font-weight:700;color:#15803D;font-family:monospace;margin-left:14px">+${fmt(pazaryeri_toplam_kdvli)}</div></div>'
     detay_html += f'<div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #8B5CF6;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700;color:#0F172A">🚢 İthalat Ödenmiş Tutar (Yoldaki/Gümrükteki Mal)</div><div style="font-size:11px;color:#64748B;margin-top:2px">İthalat Excel\'inden Ödenen / USD toplamı</div></div><div style="font-size:18px;font-weight:700;color:#6D28D9;font-family:monospace">+${fmt(odenen_ithalat)}</div></div>'
     detay_html += f'<div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #F59E0B;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700;color:#0F172A">🏦 Banka Hesapları (USD eşdeğeri)</div><div style="font-size:11px;color:#64748B;margin-top:2px">USD: ${fmt(banka_usd)} + TL: ₺{fmt(banka_tl)} ÷ {kur}</div></div><div style="font-size:18px;font-weight:700;color:#B45309;font-family:monospace">+${fmt(banka_usd_eqv)}</div></div>'
+    # Cari Alacaklar kartı (POZİTİF - eklenir)
+    if usd_alacak or tl_alacak or eur_alacak:
+        detay_html += f'<div style="background:#F0FDF4;border:1px solid #A7F3D0;border-left:4px solid #16A34A;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#166534">💚 Cari Alacaklar (size borçlular)</div><div style="font-size:11px;color:#15803D;margin-top:2px">{alacak_detay_str}</div></div><div style="font-size:18px;font-weight:700;color:#15803D;font-family:monospace;margin-left:14px">+${fmt(toplam_alacak_usd)}</div></div>'
     if usd_borc or tl_borc or eur_borc:
         detay_html += f'<div style="background:#FEF2F2;border:1px solid #FCA5A5;border-left:4px solid #DC2626;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#991B1B">⚠️ Cari Borçlar</div><div style="font-size:11px;color:#B91C1C;margin-top:2px">{borc_detay_str}</div></div><div style="font-size:18px;font-weight:700;color:#7F1D1D;font-family:monospace;margin-left:14px">-${fmt(toplam_borc_usd)}</div></div>'
     # Çekler kartı
@@ -3844,11 +3868,14 @@ elif sayfa == "💰 Toplam Aktifler":
         st.markdown(f"""
         **Toplam Aktifler (USD) =**
 
-        - **(G5F Stok Değeri ÷ 0.85) × 1.20** (Stok Excel'inden "USD SON DURUM STOK DEĞERİ" toplamı, %15 marj + %20 KDV dahil)
-        - **+ Müşteri Stokları × 1.20** (HEPSIBURADA + VATAN + EERA + Diğer firmalar TOPLAM TUTAR sütunları, KDV %20 dahil)
-        - **+ İthalat Ödenmiş Tutar** (İthalat Excel "Ödenen / USD" toplamı)
-        - **+ Banka Hesapları USD eşdeğeri** (Uygulamadaki TL hesapları kur ile USD'ye çevrilir)
-        - **− Cari Borçlar** (Cari Excel'inden bakiyesi NEGATİF olan kalemler; TL/EUR borçlar kura çevrilir)
+        - **(G5F Stok Değeri ÷ 0.85) × 1.20** — Stok Excel'inden USD STOK DEĞERİ toplamı (%15 marj + %20 KDV dahil)
+        - **+ İthalat Ödenmiş Tutar** — İthalat Excel "Ödenen / USD" toplamı
+        - **+ Banka Hesapları USD eşdeğeri** — Uygulamadaki TL hesapları kur ile USD'ye çevrilir
+        - **+ Cari Alacaklar** — Cari Excel'inden POZİTİF bakiyeler (size borçlular)
+        - **+ Manuel Eklemeler** — Kullanıcının elle eklediği kalemler
+        - **− Cari Borçlar** — Cari Excel'inden NEGATİF bakiyeler (sizin borçlu olduklarınız)
+        - **− Sistemdeki Çekler** — Uygulamadaki bekleyen + ciro çek kalanları
+        - **− Manuel Çıkarmalar** — Kullanıcının elle çıkardığı kalemler
 
         Kullanılan kur: **{kur} TL/USD** (sidebar'daki güncel kur — sidebar'da değiştirirsen burası da değişir)
         """)
