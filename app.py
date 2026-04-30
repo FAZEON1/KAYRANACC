@@ -1222,7 +1222,7 @@ with st.sidebar:
     # ─── Sayfa listesi (kullanıcıya göre dinamik) ───
     aktif_kullanici_lower = st.session_state.get("aktif_kullanici", "").lower().strip()
     # Toplam Aktifler sayfasına yetkili kullanıcılar (yeni eklemek için bu set'e ekle)
-    YETKILI_KULLANICILAR_TOPLAM_AKTIFLER = {"ibrahim", "cem"}
+    YETKILI_KULLANICILAR_TOPLAM_AKTIFLER = {"ibrahim", "cem", "yilmaz"}
     KISITLI_SAYFALAR = ["💰 Toplam Aktifler"]
 
     tum_sayfalar = [
@@ -3290,7 +3290,7 @@ ALTER TABLE odemeler ADD COLUMN IF NOT EXISTS son_erteleme_tarih DATE;""", langu
 elif sayfa == "💰 Toplam Aktifler":
     # ─── Yetki kontrolü: Sadece yetkili kullanıcılar erişebilir ───
     aktif_kul = st.session_state.get("aktif_kullanici", "").lower().strip()
-    YETKILI_TOPLAM_AKTIFLER = {"ibrahim", "cem"}
+    YETKILI_TOPLAM_AKTIFLER = {"ibrahim", "cem", "yilmaz"}
     if aktif_kul not in YETKILI_TOPLAM_AKTIFLER:
         st.error("🔒 Bu sayfaya erişim yetkiniz yok.")
         st.stop()
@@ -3655,8 +3655,8 @@ elif sayfa == "💰 Toplam Aktifler":
     except Exception:
         usd_stok, pazaryerleri = 0.0, {}
 
-    # %15 marj eklenmiş + %20 KDV dahil stok (formül: değer / 0.85 × 1.20)
-    stok_marjli = (usd_stok / 0.85) * 1.20 if usd_stok else 0
+    # %20 KDV dahil stok (formül: değer × 1.20)
+    stok_marjli = usd_stok * 1.20 if usd_stok else 0
 
     # İthalat
     try:
@@ -3791,7 +3791,7 @@ elif sayfa == "💰 Toplam Aktifler":
 
     # HTML — tek satırlık inline div'ler, boş satır YOK
     detay_html = '<div style="display:flex;flex-direction:column;gap:8px">'
-    detay_html += f'<div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #3B82F6;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700;color:#0F172A">📦 G5F Stok Değeri (marj eklenmiş + KDV dahil)</div><div style="font-size:11px;color:#64748B;margin-top:2px">Ham stok: ${fmt(usd_stok)} ÷ 0.85 (kar marjı) × 1.20 (KDV)</div></div><div style="font-size:18px;font-weight:700;color:#1D4ED8;font-family:monospace">+${fmt(stok_marjli)}</div></div>'
+    detay_html += f'<div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #3B82F6;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700;color:#0F172A">📦 G5F Stok Değeri (KDV dahil)</div><div style="font-size:11px;color:#64748B;margin-top:2px">Ham stok: ${fmt(usd_stok)} × 1.20 (KDV)</div></div><div style="font-size:18px;font-weight:700;color:#1D4ED8;font-family:monospace">+${fmt(stok_marjli)}</div></div>'
     detay_html += f'<div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #8B5CF6;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700;color:#0F172A">🚢 İthalat Ödenmiş Tutar (Yoldaki/Gümrükteki Mal)</div><div style="font-size:11px;color:#64748B;margin-top:2px">İthalat Excel\'inden Ödenen / USD toplamı</div></div><div style="font-size:18px;font-weight:700;color:#6D28D9;font-family:monospace">+${fmt(odenen_ithalat)}</div></div>'
     detay_html += f'<div style="background:white;border:1px solid #E2E8F0;border-left:4px solid #F59E0B;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700;color:#0F172A">🏦 Banka Hesapları (USD eşdeğeri)</div><div style="font-size:11px;color:#64748B;margin-top:2px">USD: ${fmt(banka_usd)} + TL: ₺{fmt(banka_tl)} ÷ {kur}</div></div><div style="font-size:18px;font-weight:700;color:#B45309;font-family:monospace">+${fmt(banka_usd_eqv)}</div></div>'
     # Cari Alacaklar kartı (POZİTİF - eklenir)
@@ -3936,7 +3936,7 @@ elif sayfa == "💰 Toplam Aktifler":
         st.markdown(f"""
         **Toplam Aktifler (USD) =**
 
-        - **(G5F Stok Değeri ÷ 0.85) × 1.20** — Stok Excel'inden USD STOK DEĞERİ toplamı (%15 marj + %20 KDV dahil)
+        - **G5F Stok Değeri × 1.20** — Stok Excel'inden USD STOK DEĞERİ toplamı (%20 KDV dahil)
         - **+ İthalat Ödenmiş Tutar** — İthalat Excel "Ödenen / USD" toplamı
         - **+ Banka Hesapları USD eşdeğeri** — Uygulamadaki TL hesapları kur ile USD'ye çevrilir
         - **+ Cari Alacaklar** — Cari Excel'inden POZİTİF bakiyeler (size borçlular)
