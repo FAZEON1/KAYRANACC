@@ -568,20 +568,26 @@ def virman_geri_al(virman_id):
 # ════════════════════════════════════════════════════════════════════
 def aktif_excel_kaydet(kullanici, dosya_tipi, veri_json):
     """
-    Excel parse sonuçlarını Supabase'e kaydeder.
-    dosya_tipi: 'stok' | 'ithalat' | 'cari'
-    veri_json: parse edilmiş veri (dict/list)
+    Excel parse sonuçlarını Supabase'e PAYLAŞIMLI olarak kaydeder.
+    Her kullanıcı (ibrahim, cem...) aynı veriyi görür.
+    Son yükleyen kullanıcının verisi geçerli olur.
+    Parametre: kullanici (artık sadece kim yüklediğini loglamak için, filtre için değil)
     """
     sb = get_client()
     try:
-        # Önce eski kaydı sil (UPSERT mantığı)
-        sb.table("aktif_excel_verileri").delete().eq("kullanici", kullanici).eq("dosya_tipi", dosya_tipi).execute()
-        # Yeni kayıt ekle
+        SHARED_KEY = "_SHARED_"
+        # Önce eski kaydı sil
+        sb.table("aktif_excel_verileri").delete().eq("kullanici", SHARED_KEY).eq("dosya_tipi", dosya_tipi).execute()
+        # Yeni kayıt ekle (paylaşımlı key ile, ama son yükleyen bilgisini açıklamada tut)
         import json
         sb.table("aktif_excel_verileri").insert({
-            "kullanici": kullanici,
+            "kullanici": SHARED_KEY,
             "dosya_tipi": dosya_tipi,
-            "veri_json": json.dumps(veri_json),
+            "veri_json": json.dumps({
+                "veri": veri_json,
+                "son_yukleyen": kullanici,
+                "yukleme_zamani": str(__import__("datetime").datetime.now()),
+            }),
         }).execute()
         return True
     except Exception:
@@ -589,26 +595,74 @@ def aktif_excel_kaydet(kullanici, dosya_tipi, veri_json):
 
 
 def aktif_excel_oku(kullanici, dosya_tipi):
-    """Kaydedilmiş Excel verisini okur. Yoksa None döner."""
+    """
+    Paylaşımlı Excel verisini okur (kullanici parametresi göz ardı edilir).
+    Eski format (sadece veri) ve yeni format (veri + meta) ikisini de destekler.
+    """
     sb = get_client()
     try:
-        res = sb.table("aktif_excel_verileri").select("*").eq("kullanici", kullanici).eq("dosya_tipi", dosya_tipi).execute()
+        SHARED_KEY = "_SHARED_"
+        # Önce paylaşımlı kaydı dene
+        res = sb.table("aktif_excel_verileri").select("*").eq("kullanici", SHARED_KEY).eq("dosya_tipi", dosya_tipi).execute()
         if res.data:
             import json
-            return json.loads(res.data[0]["veri_json"])
+            payload = json.loads(res.data[0]["veri_json"])
+            # Yeni format: {veri, son_yukleyen, yukleme_zamani}
+            if isinstance(payload, dict) and "veri" in payload and "son_yukleyen" in payload:
+                return payload["veri"]
+            # Eski format: direkt veri
+            return payload
+
+        # Geriye dönük uyumluluk: eski (kullanıcıya bağlı) kayıtları da kontrol et
+        res2 = sb.table("aktif_excel_verileri").select("*").eq("kullanici", kullanici).eq("dosya_tipi", dosya_tipi).execute()
+        if res2.data:
+            import json
+            return json.loads(res2.data[0]["veri_json"])
+        return None
+    except Exception:
+        return None
+
+
+def aktif_excel_meta_oku(dosya_tipi):
+    """
+    Excel meta bilgisi okur: son_yukleyen, yukleme_zamani
+    Returns: dict | None
+    """
+    sb = get_client()
+    try:
+        SHARED_KEY = "_SHARED_"
+        res = sb.table("aktif_excel_verileri").select("*").eq("kullanici", SHARED_KEY).eq("dosya_tipi", dosya_tipi).execute()
+        if res.data:
+            import json
+            payload = json.loads(res.data[0]["veri_json"])
+            if isinstance(payload, dict) and "son_yukleyen" in payload:
+                return {
+                    "son_yukleyen": payload.get("son_yukleyen"),
+                    "yukleme_zamani": payload.get("yukleme_zamani"),
+                }
         return None
     except Exception:
         return None
 
 
 def aktif_excel_sil(kullanici, dosya_tipi=None):
-    """Excel verilerini siler. dosya_tipi None ise tümünü siler."""
+    """Paylaşımlı Excel verilerini siler. dosya_tipi None ise tümünü siler."""
     sb = get_client()
     try:
-        q = sb.table("aktif_excel_verileri").delete().eq("kullanici", kullanici)
+        SHARED_KEY = "_SHARED_"
+        # Hem paylaşımlı hem eski kayıtları temizle
+        q = sb.table("aktif_excel_verileri").delete().eq("kullanici", SHARED_KEY)
         if dosya_tipi:
             q = q.eq("dosya_tipi", dosya_tipi)
         q.execute()
+        # Eski kullanıcı bağlı kayıtlar varsa onları da temizle
+        try:
+            q2 = sb.table("aktif_excel_verileri").delete().eq("kullanici", kullanici)
+            if dosya_tipi:
+                q2 = q2.eq("dosya_tipi", dosya_tipi)
+            q2.execute()
+        except Exception:
+            pass
         return True
     except Exception:
         return False
@@ -619,13 +673,14 @@ def aktif_excel_sil(kullanici, dosya_tipi=None):
 # ════════════════════════════════════════════════════════════════════
 def aktif_manuel_ekle(kullanici, aciklama, tutar, para_birimi="USD", tip="ekle"):
     """
-    Manuel ekleme/çıkarma kaydı yapar.
+    Manuel ekleme/çıkarma kaydı (PAYLAŞIMLI - tüm yetkili kullanıcılar görür).
     tip: 'ekle' (toplam aktife ekle) | 'cikar' (toplam aktiften çıkar)
+    kullanici parametresi: kim eklediği bilgisi için (filtreleme için değil)
     """
     sb = get_client()
     try:
         sb.table("aktif_manuel_kalemler").insert({
-            "kullanici": kullanici,
+            "kullanici": kullanici,  # kim eklediği bilgisi
             "aciklama": aciklama,
             "tutar": float(tutar),
             "para_birimi": para_birimi,
@@ -636,11 +691,14 @@ def aktif_manuel_ekle(kullanici, aciklama, tutar, para_birimi="USD", tip="ekle")
         return False
 
 
-def aktif_manuel_listele(kullanici):
-    """Kullanıcının manuel kalemlerini döndürür."""
+def aktif_manuel_listele(kullanici=None):
+    """
+    TÜM manuel kalemleri döndürür (paylaşımlı).
+    kullanici parametresi geriye dönük uyumluluk için var, kullanılmıyor.
+    """
     sb = get_client()
     try:
-        res = sb.table("aktif_manuel_kalemler").select("*").eq("kullanici", kullanici).order("id", desc=True).execute()
+        res = sb.table("aktif_manuel_kalemler").select("*").order("id", desc=True).execute()
         return res.data or []
     except Exception:
         return []

@@ -15,7 +15,7 @@ from database import (
     get_bankalar, banka_ekle, banka_guncelle, banka_sil,
     get_cekler, cek_ekle_bulk, cek_sil, cek_sil_hepsi,
     get_ertelenen_odemeler, get_virmanlar, virman_yap, virman_geri_al,
-    aktif_excel_kaydet, aktif_excel_oku, aktif_excel_sil,
+    aktif_excel_kaydet, aktif_excel_oku, aktif_excel_sil, aktif_excel_meta_oku,
     aktif_manuel_ekle, aktif_manuel_listele, aktif_manuel_sil, get_cek_toplamlari,
 )
 from excel_islemler import (
@@ -3297,6 +3297,13 @@ elif sayfa == "💰 Toplam Aktifler":
 
     st.markdown('<div class="baslik">💰 Toplam Aktifler</div>', unsafe_allow_html=True)
     st.markdown('<div class="alt-baslik">Stok + Yoldaki Mal + Banka + Alacaklar − Borçlar − Çekler (USD)</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:8px 14px;margin:8px 0;font-size:11px;color:#1E40AF;">'
+        '👥 <b>Paylaşımlı sayfa</b> — Bu sayfadaki Excel verileri ve manuel kalemler tüm yetkili kullanıcılar (ibrahim, cem) tarafından paylaşılır. '
+        'Biri güncellediğinde diğeri de en güncel halini görür.'
+        '</div>',
+        unsafe_allow_html=True
+    )
 
     kur = get_kur()
 
@@ -3462,22 +3469,43 @@ elif sayfa == "💰 Toplam Aktifler":
         return sonuc
 
     # ─── Session state init + Supabase'den önceki kayıtları yükle ───
-    aktif_kul = (st.session_state.get("aktif_kullanici") or "ibrahim").lower().strip()
-    if not aktif_kul:
-        aktif_kul = "ibrahim"
+    # NOT: Toplam Aktifler verileri paylaşımlıdır — yetki verilen tüm kullanıcılar (ibrahim, cem) aynı veriyi görür.
+    # Bu yüzden kayıtlar sabit "ortak" anahtarıyla saklanır.
+    gercek_kullanici = (st.session_state.get("aktif_kullanici") or "ibrahim").lower().strip()
+    aktif_kul = "ortak"  # Paylaşımlı veri anahtarı
 
     if "aktif_excel_yuklendi" not in st.session_state:
         # İlk açılış — Supabase'den önceki kayıtları çek (tablo yoksa None döner, sorun değil)
+        # MIGRATION: "ortak" boşsa "ibrahim"den oku ve "ortak"a kopyala (eski veriler için)
         try:
-            st.session_state.aktif_stok_data = aktif_excel_oku(aktif_kul, "stok")
+            stok_v = aktif_excel_oku(aktif_kul, "stok")
+            if stok_v is None:
+                # Eski "ibrahim" kayıtlarını ara
+                eski = aktif_excel_oku("ibrahim", "stok")
+                if eski is not None:
+                    aktif_excel_kaydet(aktif_kul, "stok", eski)
+                    stok_v = eski
+            st.session_state.aktif_stok_data = stok_v
         except Exception:
             st.session_state.aktif_stok_data = None
         try:
-            st.session_state.aktif_ithalat_data = aktif_excel_oku(aktif_kul, "ithalat")
+            ith_v = aktif_excel_oku(aktif_kul, "ithalat")
+            if ith_v is None:
+                eski = aktif_excel_oku("ibrahim", "ithalat")
+                if eski is not None:
+                    aktif_excel_kaydet(aktif_kul, "ithalat", eski)
+                    ith_v = eski
+            st.session_state.aktif_ithalat_data = ith_v
         except Exception:
             st.session_state.aktif_ithalat_data = None
         try:
-            st.session_state.aktif_cari_data = aktif_excel_oku(aktif_kul, "cari")
+            cari_v = aktif_excel_oku(aktif_kul, "cari")
+            if cari_v is None:
+                eski = aktif_excel_oku("ibrahim", "cari")
+                if eski is not None:
+                    aktif_excel_kaydet(aktif_kul, "cari", eski)
+                    cari_v = eski
+            st.session_state.aktif_cari_data = cari_v
         except Exception:
             st.session_state.aktif_cari_data = None
 
@@ -3501,19 +3529,41 @@ elif sayfa == "💰 Toplam Aktifler":
     st.markdown("### 📤 Excel Dosyalarını Yükle")
     st.markdown(
         '<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#1E3A8A">'
-        '💡 Yüklediğiniz Excel verileri <b>kalıcı olarak saklanır</b> — sayfayı yenileseniz veya çıkış yapsanız bile silinmez. Yeniden yüklemek isterseniz aşağıdan yeni dosya yükleyin.'
+        '💡 Yüklediğiniz Excel verileri <b>paylaşımlıdır</b> — yetkili tüm kullanıcılar (İbrahim, Cem) aynı veriyi görür. '
+        'Son yükleyen kullanıcının verisi geçerlidir. Sayfayı yenileseniz veya çıkış yapsanız bile silinmez.'
         '</div>',
         unsafe_allow_html=True
     )
 
     col1, col2, col3 = st.columns(3)
 
+    # Meta bilgileri al
+    stok_meta = None
+    ithalat_meta = None
+    cari_meta = None
+    try:
+        stok_meta = aktif_excel_meta_oku("stok")
+        ithalat_meta = aktif_excel_meta_oku("ithalat")
+        cari_meta = aktif_excel_meta_oku("cari")
+    except Exception:
+        pass
+
+    def _meta_str(meta):
+        """Meta bilgiyi kısa string'e çevir."""
+        if not meta:
+            return ""
+        kim = (meta.get("son_yukleyen") or "?").capitalize()
+        zaman = (meta.get("yukleme_zamani") or "")[:16]
+        return f"👤 {kim} · 🕐 {zaman}"
+
     with col1:
         st.markdown("**1️⃣ Stok Değeri Raporu**")
         if st.session_state.aktif_stok_data:
             try:
                 usd_v, pzr = st.session_state.aktif_stok_data
-                st.success(f"✅ Önceki yüklenmiş: ${float(usd_v):,.0f}")
+                st.success(f"✅ ${float(usd_v):,.0f}")
+                if stok_meta:
+                    st.caption(_meta_str(stok_meta))
             except Exception:
                 st.session_state.aktif_stok_data = None
         stok_file = st.file_uploader("Stok Excel", type=["xls", "xlsx"], key="aktif_stok_upload", label_visibility="collapsed")
@@ -3536,7 +3586,9 @@ elif sayfa == "💰 Toplam Aktifler":
         st.markdown("**2️⃣ İthalat Ödeme Takip**")
         if st.session_state.aktif_ithalat_data:
             try:
-                st.success(f"✅ Önceki yüklenmiş: ${float(st.session_state.aktif_ithalat_data):,.0f}")
+                st.success(f"✅ ${float(st.session_state.aktif_ithalat_data):,.0f}")
+                if ithalat_meta:
+                    st.caption(_meta_str(ithalat_meta))
             except Exception:
                 st.session_state.aktif_ithalat_data = None
         ithalat_file = st.file_uploader("İthalat Excel", type=["xls", "xlsx"], key="aktif_ithalat_upload", label_visibility="collapsed")
@@ -3558,16 +3610,16 @@ elif sayfa == "💰 Toplam Aktifler":
         if st.session_state.aktif_cari_data:
             try:
                 cari = st.session_state.aktif_cari_data
-                # Yeni dict format
                 if isinstance(cari, dict) and "borc" in cari:
                     b_usd = float(cari.get("borc", {}).get("usd") or 0)
                     a_usd = float(cari.get("alacak", {}).get("usd") or 0)
-                    st.success(f"✅ Önceki: Borç ${b_usd:,.0f} | Alacak ${a_usd:,.0f}")
-                # Eski tuple/list format
+                    st.success(f"✅ Borç ${b_usd:,.0f} | Alacak ${a_usd:,.0f}")
                 elif isinstance(cari, (tuple, list)) and len(cari) == 3:
-                    st.success(f"✅ Önceki yüklenmiş: ${float(cari[0]):,.0f} USD borç (eski format)")
+                    st.success(f"✅ ${float(cari[0]):,.0f} USD borç (eski format)")
                 else:
                     st.session_state.aktif_cari_data = None
+                if cari_meta:
+                    st.caption(_meta_str(cari_meta))
             except Exception:
                 st.session_state.aktif_cari_data = None
         cari_file = st.file_uploader("Cari Excel", type=["xls", "xlsx"], key="aktif_cari_upload", label_visibility="collapsed")
@@ -3576,7 +3628,6 @@ elif sayfa == "💰 Toplam Aktifler":
                 parsed = parse_cari_excel(cari_file.read())
                 st.session_state.aktif_cari_data = parsed
                 try:
-                    # Dict olarak kaydet (JSON serializable)
                     aktif_excel_kaydet(aktif_kul, "cari", parsed)
                 except Exception:
                     pass
@@ -3657,6 +3708,23 @@ elif sayfa == "💰 Toplam Aktifler":
     manuel_kalemler_db = []
     try:
         manuel_kalemler_db = aktif_manuel_listele(aktif_kul) or []
+        # MIGRATION: "ortak"ta yoksa "ibrahim"den çek ve kopyala
+        if not manuel_kalemler_db:
+            eski_kalemler = aktif_manuel_listele("ibrahim") or []
+            for kalem in eski_kalemler:
+                try:
+                    aktif_manuel_ekle(
+                        aktif_kul,
+                        kalem.get("aciklama", ""),
+                        float(kalem.get("tutar") or 0),
+                        kalem.get("para_birimi") or "USD",
+                        kalem.get("tip") or "ekle"
+                    )
+                except Exception:
+                    pass
+            # Migration sonrası tekrar oku
+            if eski_kalemler:
+                manuel_kalemler_db = aktif_manuel_listele(aktif_kul) or []
     except Exception:
         manuel_kalemler_db = []
 
